@@ -12,7 +12,7 @@ from utilities.forms.fields import (
 from utilities.forms.rendering import FieldSet
 from virtualization.models import Cluster
 
-from .choices import SyncStatusChoices
+from .choices import EndpointAuthMethodChoices, EndpointProviderChoices, SyncStatusChoices
 from .models import VCenterEndpoint
 
 
@@ -29,8 +29,16 @@ class VCenterEndpointForm(NetBoxModelForm):
     cluster = DynamicModelChoiceField(
         queryset=Cluster.objects.all(),
     )
+    provider = forms.ChoiceField(
+        choices=EndpointProviderChoices,
+        required=True,
+    )
+    auth_method = forms.ChoiceField(
+        choices=EndpointAuthMethodChoices,
+        required=True,
+    )
     password = forms.CharField(
-        label=_("Password"),
+        label=_("Password / token secret"),
         required=False,
         widget=forms.PasswordInput(render_value=False),
         help_text=_("Leave blank to keep the currently stored password."),
@@ -38,7 +46,7 @@ class VCenterEndpointForm(NetBoxModelForm):
 
     fieldsets = (
         FieldSet("name", "slug", "enabled", "comments", name=_("Endpoint")),
-        FieldSet("host", "port", "username", "password", "validate_ssl", name=_("VMware connection")),
+        FieldSet("provider", "host", "port", "username", "auth_method", "token_name", "password", "validate_ssl", name=_("Connection")),
         FieldSet("tenant", "site", "cluster", name=_("NetBox target")),
         FieldSet(
             "include_name_regex",
@@ -47,6 +55,7 @@ class VCenterEndpointForm(NetBoxModelForm):
             "sync_interfaces",
             "sync_ip_addresses",
             "sync_primary_ips",
+            "sync_lxc_containers",
             "update_existing",
             name=_("Sync behavior"),
         ),
@@ -60,9 +69,12 @@ class VCenterEndpointForm(NetBoxModelForm):
             "name",
             "slug",
             "enabled",
+            "provider",
             "host",
             "port",
             "username",
+            "auth_method",
+            "token_name",
             "password",
             "validate_ssl",
             "tenant",
@@ -74,6 +86,7 @@ class VCenterEndpointForm(NetBoxModelForm):
             "sync_interfaces",
             "sync_ip_addresses",
             "sync_primary_ips",
+            "sync_lxc_containers",
             "update_existing",
             "default_ipv4_prefix_length",
             "default_ipv6_prefix_length",
@@ -133,7 +146,12 @@ class VCenterEndpointFilterForm(NetBoxModelFilterSetForm):
         required=False,
         label=_("Last status"),
     )
+    provider = forms.MultipleChoiceField(
+        choices=EndpointProviderChoices,
+        required=False,
+        label=_("Provider"),
+    )
 
     fieldsets = (
-        FieldSet("q", "enabled", "tenant_id", "site_id", "cluster_id", "last_status", name=_("Endpoint")),
+        FieldSet("q", "enabled", "provider", "tenant_id", "site_id", "cluster_id", "last_status", name=_("Endpoint")),
     )

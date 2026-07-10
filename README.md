@@ -1,20 +1,21 @@
-# NetBox VMware Importer
+# NetBox VMware & Proxmox Importer
 
-NetBox plugin zum Synchronisieren von VMware vSphere/vCenter VMs nach NetBox.
+NetBox plugin zum Synchronisieren von VMware vSphere/vCenter und Proxmox VE VMs nach NetBox.
 
 ## Funktionen
 
 - vCenter/ESXi-Ziele direkt in der NetBox-Weboberflaeche pflegen
+- Proxmox VE-Ziele direkt in der NetBox-Weboberflaeche pflegen
 - Pro Ziel Tenant, Site und NetBox-Cluster hinterlegen
 - Manuelle Synchronisation per Button
 - Optionale automatische Synchronisation ueber ein Minutenintervall
 - Import von VM-Name, Status, vCPU, RAM, Disk, Plattform, Interfaces, MAC-Adressen und IPs
 - MAC-Adressen werden als NetBox MAC Address Objekte am VM-Interface angelegt und als primaere MAC gesetzt
-- Virtuelle VMware-Festplatten werden als NetBox Virtual Disks mit Groesse und Backing-Info dokumentiert
+- Virtuelle Festplatten werden als NetBox Virtual Disks mit Groesse und Backing-Info dokumentiert
 - Primaere IPv4/IPv6 wird anhand der ersten gefundenen Gast-IP gesetzt
 - Multi-Tenant-sicherer VM-Abgleich ueber `name + cluster`
 
-Das Plugin loescht bewusst keine verwaisten VMs, Interfaces oder IP-Adressen. Damit bleibt der erste Rollout konservativ und vermeidet Datenverlust, wenn VMware-Gastdaten unvollstaendig sind.
+Das Plugin loescht bewusst keine verwaisten VMs, Interfaces oder IP-Adressen. Damit bleibt der erste Rollout konservativ und vermeidet Datenverlust, wenn Hypervisor-Gastdaten unvollstaendig sind.
 
 ## Installation
 
@@ -43,11 +44,13 @@ sudo systemctl restart netbox netbox-rq
 
 ## Nutzung
 
-1. In NetBox unter `VMware Import > vCenter Endpoints` ein Ziel anlegen.
-2. vCenter Host, Port, Benutzername und Passwort eintragen.
-3. Tenant, Site und Cluster fuer den Kunden auswaehlen.
-4. Optional Regex-Filter und Sync-Intervall setzen.
-5. Auf der Detailseite `Sync jetzt starten` ausfuehren.
+1. In NetBox unter `VM Import > Endpoints` ein Ziel anlegen.
+2. Provider auswaehlen.
+3. VMware: vCenter Host, Port, Benutzername und Passwort eintragen.
+4. Proxmox: Proxmox Host, Port `8006`, Benutzername und Passwort oder API-Token eintragen.
+5. Tenant, Site und Cluster fuer den Kunden auswaehlen.
+6. Optional Regex-Filter und Sync-Intervall setzen.
+7. Auf der Detailseite `Sync jetzt starten` ausfuehren.
 
 Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.
 
@@ -55,10 +58,10 @@ Ab Version `0.1.8` wird beim Speichern eines Endpoints zusaetzlich ein wiederkeh
 
 ## Sicherheit
 
-Das vCenter-Passwort wird verschluesselt in der Plugin-Tabelle gespeichert. Der Schluessel wird aus `SECRET_KEY` abgeleitet. Wenn `SECRET_KEY` rotiert wird, muessen die vCenter-Passwoerter in den Endpoints erneut gesetzt werden.
+Das Endpoint-Passwort bzw. Token-Secret wird verschluesselt in der Plugin-Tabelle gespeichert. Der Schluessel wird aus `SECRET_KEY` abgeleitet. Wenn `SECRET_KEY` rotiert wird, muessen die Secrets in den Endpoints erneut gesetzt werden.
 
 Fuer sehr strenge Umgebungen ist ein externer Secret-Store wie Vault als naechster sinnvoller Ausbaupunkt vorgesehen.
 
-## VMware-Datenqualitaet
+## Datenqualitaet
 
-IP-Adressen kommen aus den VMware Guest Tools. Ohne laufende bzw. aktuelle VMware Tools koennen Interfaces und IPs fehlen oder veraltet sein.
+IP-Adressen kommen bei VMware aus den VMware Guest Tools und bei Proxmox-QEMU aus dem QEMU Guest Agent. Ohne laufende bzw. aktuelle Guest Tools koennen Interfaces und IPs fehlen oder veraltet sein.

@@ -5,7 +5,7 @@ from netbox.filtersets import NetBoxModelFilterSet
 from tenancy.models import Tenant
 from virtualization.models import Cluster
 
-from .choices import SyncStatusChoices
+from .choices import EndpointProviderChoices, SyncStatusChoices
 from .models import VCenterEndpoint
 
 
@@ -25,6 +25,9 @@ class VCenterEndpointFilterSet(NetBoxModelFilterSet):
     last_status = django_filters.MultipleChoiceFilter(
         choices=SyncStatusChoices,
     )
+    provider = django_filters.MultipleChoiceFilter(
+        choices=EndpointProviderChoices,
+    )
 
     class Meta:
         model = VCenterEndpoint
@@ -33,6 +36,7 @@ class VCenterEndpointFilterSet(NetBoxModelFilterSet):
             "name",
             "slug",
             "enabled",
+            "provider",
             "host",
             "tenant_id",
             "site_id",

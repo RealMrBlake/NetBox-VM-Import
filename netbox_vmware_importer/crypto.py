@@ -22,4 +22,4 @@ def decrypt_secret(value):
     try:
         return _fernet().decrypt(value.encode("ascii")).decode("utf-8")
     except InvalidToken as exc:
-        raise ValueError("Stored VMware password cannot be decrypted. Re-enter it on the endpoint.") from exc
+        raise ValueError("Stored endpoint password cannot be decrypted. Re-enter it on the endpoint.") from exc

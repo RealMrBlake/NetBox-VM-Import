@@ -16,3 +16,23 @@ class SyncStatusChoices(ChoiceSet):
         (STATUS_SUCCESS, _("Success"), "green"),
         (STATUS_FAILED, _("Failed"), "red"),
     ]
+
+
+class EndpointProviderChoices(ChoiceSet):
+    PROVIDER_VMWARE = "vmware"
+    PROVIDER_PROXMOX = "proxmox"
+
+    CHOICES = [
+        (PROVIDER_VMWARE, _("VMware vSphere"), "blue"),
+        (PROVIDER_PROXMOX, _("Proxmox VE"), "orange"),
+    ]
+
+
+class EndpointAuthMethodChoices(ChoiceSet):
+    METHOD_PASSWORD = "password"
+    METHOD_API_TOKEN = "api_token"
+
+    CHOICES = [
+        (METHOD_PASSWORD, _("Username/password"), "blue"),
+        (METHOD_API_TOKEN, _("API token"), "green"),
+    ]

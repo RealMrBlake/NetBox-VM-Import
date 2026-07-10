@@ -33,7 +33,7 @@ def schedule_endpoint_sync(endpoint):
 
 class SyncVCenterEndpointJob(JobRunner):
     class Meta:
-        name = "VMware VM synchronization"
+        name = "VM synchronization"
 
     def run(self, *args, **kwargs):
         endpoint = self.job.object
@@ -45,7 +45,7 @@ class SyncVCenterEndpointJob(JobRunner):
             endpoint.mark_failure("Endpoint is disabled.")
             raise JobFailed("Endpoint is disabled.")
 
-        self.logger.info("Starting VMware sync for %s (%s)", endpoint.name, endpoint.host)
+        self.logger.info("Starting VM sync for %s (%s)", endpoint.name, endpoint.host)
         endpoint.mark_running()
 
         try:
@@ -82,7 +82,7 @@ class SyncVCenterEndpointJob(JobRunner):
         endpoint.mark_success(result)
         self.logger.info(
             (
-                "VMware sync finished for %s: %s VM(s), %s created, %s updated, %s skipped; "
+                "VM sync finished for %s: %s VM(s), %s created, %s updated, %s skipped; "
                 "virtual disks: %s created, %s updated, %s deleted; "
                 "MAC addresses: %s created, %s updated, %s deleted."
             ),
@@ -103,7 +103,7 @@ class SyncVCenterEndpointJob(JobRunner):
 @system_job(interval=5)
 class ScheduleDueVCenterSyncsJob(JobRunner):
     class Meta:
-        name = "Schedule due VMware VM synchronizations"
+        name = "Schedule due VM synchronizations"
 
     def run(self, *args, **kwargs):
         now = timezone.now()
@@ -120,4 +120,4 @@ class ScheduleDueVCenterSyncsJob(JobRunner):
             if schedule_endpoint_sync(endpoint):
                 scheduled += 1
 
-        self.logger.info("Ensured %s VMware endpoint sync schedule(s).", scheduled)
+        self.logger.info("Ensured %s endpoint sync schedule(s).", scheduled)

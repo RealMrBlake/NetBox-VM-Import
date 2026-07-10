@@ -10,6 +10,13 @@ from dcim.models import MACAddress, Platform
 from ipam.models import IPAddress
 from virtualization.models import VMInterface, VirtualDisk, VirtualMachine
 
+from .choices import EndpointAuthMethodChoices, EndpointProviderChoices
+
+try:
+    import requests
+except ImportError:  # pragma: no cover - handled at runtime inside NetBox
+    requests = None
+
 try:
     from pyVim.connect import Disconnect, SmartConnect
     from pyVmomi import vim
@@ -67,6 +74,10 @@ class SyncResult:
 
 
 class VMwareConnectionError(RuntimeError):
+    pass
+
+
+class ProxmoxConnectionError(RuntimeError):
     pass
 
 
@@ -210,12 +221,352 @@ class VMwareClient:
         return interfaces
 
 
+class ProxmoxClient:
+    DISK_KEY_PATTERN = re.compile(r"^(ide|sata|scsi|virtio)\d+$")
+    LXC_DISK_KEY_PATTERN = re.compile(r"^(rootfs|mp\d+)$")
+    NET_KEY_PATTERN = re.compile(r"^net\d+$")
+
+    def __init__(self, endpoint):
+        self.endpoint = endpoint
+        self.session = None
+        self.base_url = f"https://{endpoint.host}:{endpoint.port}/api2/json"
+
+    def __enter__(self):
+        if requests is None:
+            raise ProxmoxConnectionError("requests is not installed in the NetBox Python environment.")
+
+        self.session = requests.Session()
+        self.session.verify = self.endpoint.validate_ssl
+
+        if self.endpoint.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN:
+            token_id = self.endpoint.token_name if "!" in self.endpoint.token_name else f"{self.endpoint.username}!{self.endpoint.token_name}"
+            self.session.headers.update({"Authorization": f"PVEAPIToken={token_id}={self.endpoint.password}"})
+        else:
+            self._authenticate_with_password()
+
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.session is not None:
+            self.session.close()
+
+    def _authenticate_with_password(self):
+        response = self.session.post(
+            self._url("access/ticket"),
+            data={
+                "username": self.endpoint.username,
+                "password": self.endpoint.password,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json().get("data") or {}
+        ticket = data.get("ticket")
+        csrf_token = data.get("CSRFPreventionToken")
+
+        if not ticket:
+            raise ProxmoxConnectionError("Proxmox authentication did not return a ticket.")
+
+        self.session.cookies.set("PVEAuthCookie", ticket)
+        if csrf_token:
+            self.session.headers.update({"CSRFPreventionToken": csrf_token})
+
+    def _url(self, path):
+        return f"{self.base_url}/{path.strip('/')}"
+
+    def _get(self, path, params=None):
+        response = self.session.get(self._url(path), params=params, timeout=30)
+        response.raise_for_status()
+        return response.json().get("data")
+
+    def iter_virtual_machines(self):
+        resources = self._get("cluster/resources", params={"type": "vm"}) or []
+
+        for resource in resources:
+            vm_type = resource.get("type")
+            if vm_type == "lxc" and not self.endpoint.sync_lxc_containers:
+                continue
+            if vm_type not in ("qemu", "lxc"):
+                continue
+
+            yield self._build_vm_data(resource)
+
+    def _build_vm_data(self, resource):
+        vmid = resource["vmid"]
+        node = resource["node"]
+        vm_type = resource["type"]
+        config = self._get(f"nodes/{node}/{vm_type}/{vmid}/config") or {}
+
+        name = resource.get("name") or config.get("name") or config.get("hostname") or f"{vm_type}-{vmid}"
+        status = "active" if resource.get("status") == "running" else "offline"
+        memory_mb = self._get_memory_mb(resource, config)
+        vcpus = self._get_vcpus(resource, config)
+
+        if vm_type == "qemu":
+            disks = self._get_qemu_disks(config)
+            interfaces = self._get_qemu_interfaces(config)
+            self._merge_qemu_agent_interfaces(node, vmid, interfaces)
+            guest_os = self._get_qemu_guest_os(node, vmid)
+        else:
+            disks = self._get_lxc_disks(config)
+            interfaces = self._get_lxc_interfaces(config)
+            guest_os = "Linux Container"
+
+        disk_mb = sum(disk.size_mb for disk in disks) or self._bytes_to_mb(resource.get("maxdisk"))
+
+        return VMData(
+            name=str(name),
+            status=status,
+            vcpus=vcpus,
+            memory_mb=memory_mb,
+            disk_mb=disk_mb,
+            guest_os=guest_os,
+            disks=disks,
+            interfaces=interfaces,
+        )
+
+    @staticmethod
+    def _get_memory_mb(resource, config):
+        memory = config.get("memory")
+        if memory not in (None, ""):
+            try:
+                return int(memory)
+            except (TypeError, ValueError):
+                pass
+
+        return ProxmoxClient._bytes_to_mb(resource.get("maxmem"))
+
+    @staticmethod
+    def _get_vcpus(resource, config):
+        try:
+            sockets = int(config.get("sockets") or 1)
+            cores = int(config.get("cores") or resource.get("maxcpu") or 0)
+            return max(sockets * cores, 0)
+        except (TypeError, ValueError):
+            return int(resource.get("maxcpu") or 0)
+
+    @staticmethod
+    def _bytes_to_mb(value):
+        try:
+            return round(int(value or 0) / 1024 / 1024)
+        except (TypeError, ValueError):
+            return 0
+
+    def _get_qemu_disks(self, config):
+        disks = []
+
+        for key, value in sorted(config.items()):
+            if not self.DISK_KEY_PATTERN.match(key):
+                continue
+            parsed = self._parse_proxmox_value(value)
+            if parsed.get("media") == "cdrom":
+                continue
+
+            size_mb = self._parse_size_mb(parsed.get("size"))
+            if size_mb <= 0:
+                continue
+
+            disks.append(
+                DiskData(
+                    name=key,
+                    size_mb=size_mb,
+                    description=f"Proxmox: {str(value)[:191]}",
+                )
+            )
+
+        return disks
+
+    def _get_lxc_disks(self, config):
+        disks = []
+
+        for key, value in sorted(config.items()):
+            if not self.LXC_DISK_KEY_PATTERN.match(key):
+                continue
+
+            parsed = self._parse_proxmox_value(value)
+            size_mb = self._parse_size_mb(parsed.get("size"))
+            if size_mb <= 0:
+                continue
+
+            disks.append(
+                DiskData(
+                    name=key,
+                    size_mb=size_mb,
+                    description=f"Proxmox: {str(value)[:191]}",
+                )
+            )
+
+        return disks
+
+    def _get_qemu_interfaces(self, config):
+        interfaces = []
+
+        for key, value in sorted(config.items()):
+            if not self.NET_KEY_PATTERN.match(key):
+                continue
+
+            parsed = self._parse_proxmox_value(value)
+            mac_address = self._extract_proxmox_mac(parsed)
+            if not mac_address:
+                continue
+
+            bridge = parsed.get("bridge")
+            name = f"{key} ({bridge})" if bridge else key
+            interfaces.append(InterfaceData(name=name[:64], mac_address=mac_address))
+
+        return interfaces
+
+    def _get_lxc_interfaces(self, config):
+        interfaces = []
+
+        for key, value in sorted(config.items()):
+            if not self.NET_KEY_PATTERN.match(key):
+                continue
+
+            parsed = self._parse_proxmox_value(value)
+            mac_address = parsed.get("hwaddr")
+            if not mac_address:
+                continue
+
+            name = parsed.get("name") or key
+            ip_addresses = []
+            for ip_key in ("ip", "ip6"):
+                ip_value = parsed.get(ip_key)
+                if ip_value and ip_value not in ("dhcp", "manual", "auto"):
+                    ip_addresses.append(ip_value)
+
+            interfaces.append(
+                InterfaceData(
+                    name=str(name)[:64],
+                    mac_address=mac_address,
+                    ip_addresses=ip_addresses,
+                )
+            )
+
+        return interfaces
+
+    def _merge_qemu_agent_interfaces(self, node, vmid, interfaces):
+        try:
+            response = self._get(f"nodes/{node}/qemu/{vmid}/agent/network-get-interfaces") or {}
+        except requests.RequestException:
+            return
+
+        agent_interfaces = response.get("result") if isinstance(response, dict) else response
+        if not isinstance(agent_interfaces, list):
+            return
+
+        interfaces_by_mac = {self._normalize_mac(interface.mac_address): interface for interface in interfaces}
+
+        for agent_interface in agent_interfaces:
+            mac_address = agent_interface.get("hardware-address")
+            normalized_mac = self._normalize_mac(mac_address)
+            if not normalized_mac:
+                continue
+
+            ip_addresses = []
+            for ip_data in agent_interface.get("ip-addresses") or []:
+                ip_address = ip_data.get("ip-address")
+                prefix = ip_data.get("prefix")
+                if not ip_address:
+                    continue
+                if prefix is not None:
+                    ip_addresses.append(f"{ip_address}/{prefix}")
+                else:
+                    ip_addresses.append(ip_address)
+
+            if normalized_mac in interfaces_by_mac:
+                interfaces_by_mac[normalized_mac].ip_addresses = ip_addresses
+            else:
+                interfaces.append(
+                    InterfaceData(
+                        name=str(agent_interface.get("name") or f"NIC-{normalized_mac[-5:]}")[:64],
+                        mac_address=normalized_mac,
+                        ip_addresses=ip_addresses,
+                    )
+                )
+
+    def _get_qemu_guest_os(self, node, vmid):
+        try:
+            response = self._get(f"nodes/{node}/qemu/{vmid}/agent/get-osinfo") or {}
+        except requests.RequestException:
+            return ""
+
+        result = response.get("result") if isinstance(response, dict) else None
+        if not isinstance(result, dict):
+            return ""
+
+        return result.get("pretty-name") or result.get("name") or ""
+
+    @staticmethod
+    def _parse_proxmox_value(value):
+        parsed = {"_raw": str(value)}
+        parts = str(value).split(",")
+        if parts:
+            parsed["_first"] = parts[0]
+
+        for part in parts:
+            if "=" in part:
+                key, part_value = part.split("=", 1)
+                parsed[key.strip()] = part_value.strip()
+
+        return parsed
+
+    @staticmethod
+    def _extract_proxmox_mac(parsed):
+        for key in ("virtio", "e1000", "e1000e", "rtl8139", "vmxnet3", "hwaddr"):
+            if parsed.get(key):
+                return parsed[key]
+        return None
+
+    @staticmethod
+    def _parse_size_mb(value):
+        if value in (None, ""):
+            return 0
+
+        match = re.match(r"^\s*([0-9.]+)\s*([KMGTPE]?)(?:i?B)?\s*$", str(value), re.IGNORECASE)
+        if not match:
+            return 0
+
+        amount = float(match.group(1))
+        unit = match.group(2).upper()
+        factors = {
+            "": 1,
+            "K": 1 / 1024,
+            "M": 1,
+            "G": 1024,
+            "T": 1024 * 1024,
+            "P": 1024 * 1024 * 1024,
+            "E": 1024 * 1024 * 1024 * 1024,
+        }
+
+        if not unit and amount > 1024 * 1024:
+            return round(amount / 1024 / 1024)
+
+        return round(amount * factors.get(unit, 1))
+
+    @staticmethod
+    def _normalize_mac(mac_address):
+        if not mac_address:
+            return None
+
+        value = str(mac_address).strip().replace("-", ":").lower()
+        parts = value.split(":")
+        if len(parts) != 6:
+            return None
+
+        try:
+            return ":".join(f"{int(part, 16):02x}" for part in parts)
+        except ValueError:
+            return None
+
+
 class VMwareImporter:
     def __init__(self, endpoint, logger):
         self.endpoint = endpoint
         self.logger = logger
         self.include_pattern = re.compile(endpoint.include_name_regex) if endpoint.include_name_regex else None
         self.exclude_pattern = re.compile(endpoint.exclude_name_regex) if endpoint.exclude_name_regex else None
+        self.provider_name = "Proxmox" if endpoint.provider == EndpointProviderChoices.PROVIDER_PROXMOX else "VMware"
         self.interface_content_type = None
         self.mac_address_content_type = None
 
@@ -224,8 +575,9 @@ class VMwareImporter:
         platforms = list(Platform.objects.all())
         self.interface_content_type = ContentType.objects.get_for_model(VMInterface)
         self.mac_address_content_type = ContentType.objects.get_for_model(VMInterface)
+        client_class = ProxmoxClient if self.endpoint.provider == EndpointProviderChoices.PROVIDER_PROXMOX else VMwareClient
 
-        with VMwareClient(self.endpoint) as client:
+        with client_class(self.endpoint) as client:
             for vm_data in client.iter_virtual_machines():
                 result.seen += 1
 
@@ -337,15 +689,18 @@ class VMwareImporter:
                 result.virtual_disks_updated += 1
                 self.logger.info("Updated virtual disk %s on %s", disk_data.name, nb_vm.name)
 
-        stale_disks = VirtualDisk.objects.filter(
-            virtual_machine=nb_vm,
-            description__startswith="VMware:",
-        ).exclude(name__in=synced_names)
-        stale_count = stale_disks.count()
-        if stale_count:
+        stale_count = 0
+        for description_prefix in (f"{self.provider_name}:",):
+            stale_disks = VirtualDisk.objects.filter(
+                virtual_machine=nb_vm,
+                description__startswith=description_prefix,
+            ).exclude(name__in=synced_names)
+            stale_count += stale_disks.count()
             stale_disks.delete()
+
+        if stale_count:
             result.virtual_disks_deleted += stale_count
-            self.logger.info("Deleted %s stale VMware virtual disk(s) from %s", stale_count, nb_vm.name)
+            self.logger.info("Deleted %s stale %s virtual disk(s) from %s", stale_count, self.provider_name, nb_vm.name)
 
         disk_total = nb_vm.virtualdisks.aggregate(total=Sum("size", default=0))["total"] or vm_data.disk_mb
         if nb_vm.disk != disk_total:
@@ -422,7 +777,7 @@ class VMwareImporter:
                 assigned_object=vm_interface,
             )
 
-        mac_obj.description = "VMware reported MAC address"
+        mac_obj.description = f"{self.provider_name} reported MAC address"
         mac_obj.full_clean()
         mac_obj.save()
 
@@ -442,13 +797,13 @@ class VMwareImporter:
         stale_macs = MACAddress.objects.filter(
             assigned_object_type=self.mac_address_content_type,
             assigned_object_id=vm_interface.pk,
-            description="VMware reported MAC address",
+            description=f"{self.provider_name} reported MAC address",
         ).exclude(pk=mac_obj.pk)
         stale_count = stale_macs.count()
         if stale_count:
             stale_macs.delete()
             result.mac_addresses_deleted += stale_count
-            self.logger.info("Deleted %s stale VMware MAC address(es) from interface %s", stale_count, vm_interface.name)
+            self.logger.info("Deleted %s stale %s MAC address(es) from interface %s", stale_count, self.provider_name, vm_interface.name)
 
         return mac_obj
 

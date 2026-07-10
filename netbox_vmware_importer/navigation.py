@@ -4,7 +4,7 @@ from netbox.plugins import PluginMenu, PluginMenuButton, PluginMenuItem
 
 endpoint_item = PluginMenuItem(
     link="plugins:netbox_vmware_importer:vcenterendpoint_list",
-    link_text="vCenter Endpoints",
+    link_text="Endpoints",
     permissions=["netbox_vmware_importer.view_vcenterendpoint"],
     buttons=(
         PluginMenuButton(
@@ -18,9 +18,9 @@ endpoint_item = PluginMenuItem(
 )
 
 menu = PluginMenu(
-    label="VMware Import",
+    label="VM Import",
     groups=(
-        ("VMware", (endpoint_item,)),
+        ("Providers", (endpoint_item,)),
     ),
     icon_class="mdi mdi-cloud-sync",
 )

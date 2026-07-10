@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from netbox.models import NetBoxModel
 from netbox.models.features import JobsMixin
 
-from .choices import SyncStatusChoices
+from .choices import EndpointAuthMethodChoices, EndpointProviderChoices, SyncStatusChoices
 from .crypto import decrypt_secret, encrypt_secret
 
 
@@ -26,9 +26,14 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     enabled = models.BooleanField(
         default=True,
     )
+    provider = models.CharField(
+        max_length=30,
+        choices=EndpointProviderChoices,
+        default=EndpointProviderChoices.PROVIDER_VMWARE,
+    )
     host = models.CharField(
         max_length=255,
-        help_text=_("vCenter or ESXi hostname or IP address"),
+        help_text=_("vCenter, ESXi, or Proxmox VE hostname or IP address"),
     )
     port = models.PositiveIntegerField(
         default=443,
@@ -37,13 +42,23 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     username = models.CharField(
         max_length=255,
     )
+    auth_method = models.CharField(
+        max_length=30,
+        choices=EndpointAuthMethodChoices,
+        default=EndpointAuthMethodChoices.METHOD_PASSWORD,
+    )
+    token_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text=_("Proxmox API token ID, e.g. netbox-import. The token secret is stored in the password field."),
+    )
     password_ciphertext = models.TextField(
         blank=True,
         editable=False,
     )
     validate_ssl = models.BooleanField(
         default=False,
-        help_text=_("Validate the VMware endpoint certificate."),
+        help_text=_("Validate the endpoint TLS certificate."),
     )
     tenant = models.ForeignKey(
         to="tenancy.Tenant",
@@ -63,7 +78,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         to="virtualization.Cluster",
         on_delete=models.PROTECT,
         related_name="vmware_import_endpoints",
-        help_text=_("NetBox cluster into which VMware VMs will be synchronized."),
+        help_text=_("NetBox cluster into which hypervisor VMs will be synchronized."),
     )
     include_name_regex = models.CharField(
         max_length=255,
@@ -87,6 +102,10 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     )
     sync_primary_ips = models.BooleanField(
         default=True,
+    )
+    sync_lxc_containers = models.BooleanField(
+        default=True,
+        verbose_name=_("Sync Proxmox LXC containers"),
     )
     update_existing = models.BooleanField(
         default=True,
@@ -154,9 +173,12 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
 
     clone_fields = (
         "enabled",
+        "provider",
         "host",
         "port",
         "username",
+        "auth_method",
+        "token_name",
         "validate_ssl",
         "tenant",
         "site",
@@ -167,6 +189,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         "sync_interfaces",
         "sync_ip_addresses",
         "sync_primary_ips",
+        "sync_lxc_containers",
         "update_existing",
         "default_ipv4_prefix_length",
         "default_ipv6_prefix_length",
@@ -175,8 +198,8 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
 
     class Meta:
         ordering = ("name",)
-        verbose_name = _("vCenter endpoint")
-        verbose_name_plural = _("vCenter endpoints")
+        verbose_name = _("virtualization endpoint")
+        verbose_name_plural = _("virtualization endpoints")
 
     def __str__(self):
         return self.name
@@ -206,6 +229,14 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         if self.site_id and self.cluster_id and getattr(self.cluster, "site_id", None):
             if self.cluster.site_id != self.site_id:
                 raise ValidationError({"cluster": _("Selected cluster belongs to a different site.")})
+
+        if self.provider == EndpointProviderChoices.PROVIDER_VMWARE:
+            if self.auth_method != EndpointAuthMethodChoices.METHOD_PASSWORD:
+                raise ValidationError({"auth_method": _("VMware endpoints currently support username/password authentication only.")})
+
+        if self.provider == EndpointProviderChoices.PROVIDER_PROXMOX:
+            if self.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN and not self.token_name:
+                raise ValidationError({"token_name": _("A token name is required for Proxmox API token authentication.")})
 
     def mark_queued(self):
         self.last_status = SyncStatusChoices.STATUS_QUEUED

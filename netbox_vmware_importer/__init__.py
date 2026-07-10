@@ -3,9 +3,9 @@ from netbox.plugins import PluginConfig
 
 class VMwareImporterConfig(PluginConfig):
     name = "netbox_vmware_importer"
-    verbose_name = "VMware Importer"
-    description = "Synchronize VMware vSphere virtual machines into NetBox."
-    version = "0.1.8"
+    verbose_name = "Virtualization Importer"
+    description = "Synchronize VMware vSphere and Proxmox VE virtual machines into NetBox."
+    version = "0.2.0"
     author = "Internal NetBox Team"
     base_url = "vmware-importer"
     min_version = "4.4.0"

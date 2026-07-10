@@ -46,6 +46,6 @@ class VCenterEndpointSyncView(View):
 
         SyncVCenterEndpointJob.enqueue(instance=endpoint)
         endpoint.mark_queued()
-        messages.success(request, _("VMware sync job queued for %(endpoint)s.") % {"endpoint": endpoint})
+        messages.success(request, _("VM sync job queued for %(endpoint)s.") % {"endpoint": endpoint})
 
         return redirect(endpoint)

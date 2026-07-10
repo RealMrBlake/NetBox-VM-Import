@@ -11,6 +11,7 @@ class VCenterEndpointTable(NetBoxTable):
         linkify=True,
     )
     enabled = BooleanColumn()
+    provider = ChoiceFieldColumn()
     tenant = tables.Column(
         linkify=True,
     )
@@ -31,6 +32,7 @@ class VCenterEndpointTable(NetBoxTable):
             "id",
             "name",
             "enabled",
+            "provider",
             "host",
             "tenant",
             "site",
@@ -45,6 +47,7 @@ class VCenterEndpointTable(NetBoxTable):
             "pk",
             "name",
             "enabled",
+            "provider",
             "host",
             "tenant",
             "cluster",
