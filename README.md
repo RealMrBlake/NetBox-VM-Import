@@ -52,6 +52,8 @@ sudo systemctl restart netbox netbox-rq
 6. Optional Regex-Filter und Sync-Intervall setzen.
 7. Auf der Detailseite `Sync jetzt starten` ausfuehren.
 
+Bei selbstsignierten Proxmox-Zertifikaten `Validate SSL` deaktiviert lassen. Wenn Proxmox langsam antwortet, kann `API timeout` am Endpoint erhoeht werden.
+
 Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.
 
 Ab Version `0.1.8` wird beim Speichern eines Endpoints zusaetzlich ein wiederkehrender NetBox-Job fuer genau diesen Endpoint geplant. Nach einem Update vorhandene Endpoints einmal speichern oder `netbox-rq` neu starten und bis zum naechsten Systemjob-Lauf warten.

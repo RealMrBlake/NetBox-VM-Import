@@ -46,7 +46,18 @@ class VCenterEndpointForm(NetBoxModelForm):
 
     fieldsets = (
         FieldSet("name", "slug", "enabled", "comments", name=_("Endpoint")),
-        FieldSet("provider", "host", "port", "username", "auth_method", "token_name", "password", "validate_ssl", name=_("Connection")),
+        FieldSet(
+            "provider",
+            "host",
+            "port",
+            "username",
+            "auth_method",
+            "token_name",
+            "password",
+            "validate_ssl",
+            "request_timeout_seconds",
+            name=_("Connection"),
+        ),
         FieldSet("tenant", "site", "cluster", name=_("NetBox target")),
         FieldSet(
             "include_name_regex",
@@ -77,6 +88,7 @@ class VCenterEndpointForm(NetBoxModelForm):
             "token_name",
             "password",
             "validate_ssl",
+            "request_timeout_seconds",
             "tenant",
             "site",
             "cluster",

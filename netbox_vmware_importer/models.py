@@ -60,6 +60,11 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         default=False,
         help_text=_("Validate the endpoint TLS certificate."),
     )
+    request_timeout_seconds = models.PositiveIntegerField(
+        default=120,
+        validators=[MinValueValidator(5), MaxValueValidator(600)],
+        help_text=_("HTTP/API read timeout in seconds."),
+    )
     tenant = models.ForeignKey(
         to="tenancy.Tenant",
         on_delete=models.PROTECT,
@@ -180,6 +185,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         "auth_method",
         "token_name",
         "validate_ssl",
+        "request_timeout_seconds",
         "tenant",
         "site",
         "cluster",

@@ -40,6 +40,10 @@
           <th scope="row">Validate SSL</th>
           <td>{{ object.validate_ssl|yesno:"Yes,No" }}</td>
         </tr>
+        <tr>
+          <th scope="row">API timeout</th>
+          <td>{{ object.request_timeout_seconds }} seconds</td>
+        </tr>
       </table>
     </div>
   </div>

@@ -14,8 +14,10 @@ from .choices import EndpointAuthMethodChoices, EndpointProviderChoices
 
 try:
     import requests
+    from urllib3.exceptions import InsecureRequestWarning
 except ImportError:  # pragma: no cover - handled at runtime inside NetBox
     requests = None
+    InsecureRequestWarning = None
 
 try:
     from pyVim.connect import Disconnect, SmartConnect
@@ -230,6 +232,7 @@ class ProxmoxClient:
         self.endpoint = endpoint
         self.session = None
         self.base_url = f"https://{endpoint.host}:{endpoint.port}/api2/json"
+        self.timeout = (10, endpoint.request_timeout_seconds or 120)
 
     def __enter__(self):
         if requests is None:
@@ -237,6 +240,8 @@ class ProxmoxClient:
 
         self.session = requests.Session()
         self.session.verify = self.endpoint.validate_ssl
+        if not self.endpoint.validate_ssl and InsecureRequestWarning is not None:
+            requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
         if self.endpoint.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN:
             token_id = self.endpoint.token_name if "!" in self.endpoint.token_name else f"{self.endpoint.username}!{self.endpoint.token_name}"
@@ -251,15 +256,14 @@ class ProxmoxClient:
             self.session.close()
 
     def _authenticate_with_password(self):
-        response = self.session.post(
-            self._url("access/ticket"),
+        response = self._request(
+            "POST",
+            "access/ticket",
             data={
                 "username": self.endpoint.username,
                 "password": self.endpoint.password,
             },
-            timeout=30,
         )
-        response.raise_for_status()
         data = response.json().get("data") or {}
         ticket = data.get("ticket")
         csrf_token = data.get("CSRFPreventionToken")
@@ -274,9 +278,21 @@ class ProxmoxClient:
     def _url(self, path):
         return f"{self.base_url}/{path.strip('/')}"
 
+    def _request(self, method, path, **kwargs):
+        url = self._url(path)
+        try:
+            response = self.session.request(method, url, timeout=self.timeout, **kwargs)
+            response.raise_for_status()
+            return response
+        except requests.Timeout as exc:
+            raise ProxmoxConnectionError(
+                f"Proxmox API {method} {path} timed out after {self.timeout[1]} seconds."
+            ) from exc
+        except requests.RequestException as exc:
+            raise ProxmoxConnectionError(f"Proxmox API {method} {path} failed: {exc}") from exc
+
     def _get(self, path, params=None):
-        response = self.session.get(self._url(path), params=params, timeout=30)
-        response.raise_for_status()
+        response = self._request("GET", path, params=params)
         return response.json().get("data")
 
     def iter_virtual_machines(self):
@@ -448,7 +464,7 @@ class ProxmoxClient:
     def _merge_qemu_agent_interfaces(self, node, vmid, interfaces):
         try:
             response = self._get(f"nodes/{node}/qemu/{vmid}/agent/network-get-interfaces") or {}
-        except requests.RequestException:
+        except (requests.RequestException, ProxmoxConnectionError):
             return
 
         agent_interfaces = response.get("result") if isinstance(response, dict) else response
@@ -488,7 +504,7 @@ class ProxmoxClient:
     def _get_qemu_guest_os(self, node, vmid):
         try:
             response = self._get(f"nodes/{node}/qemu/{vmid}/agent/get-osinfo") or {}
-        except requests.RequestException:
+        except (requests.RequestException, ProxmoxConnectionError):
             return ""
 
         result = response.get("result") if isinstance(response, dict) else None
