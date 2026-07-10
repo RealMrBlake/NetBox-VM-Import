@@ -7,7 +7,6 @@ from tenancy.models import Tenant
 from utilities.forms.fields import (
     DynamicModelChoiceField,
     DynamicModelMultipleChoiceField,
-    MultipleChoiceField,
     SlugField,
 )
 from utilities.forms.rendering import FieldSet
@@ -129,7 +128,7 @@ class VCenterEndpointFilterForm(NetBoxModelFilterSetForm):
         required=False,
         label=_("Cluster"),
     )
-    last_status = MultipleChoiceField(
+    last_status = forms.MultipleChoiceField(
         choices=SyncStatusChoices,
         required=False,
         label=_("Last status"),
