@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netbox-vmware-importer"
-version = "0.2.4"
+version = "0.2.5"
 description = "NetBox plugin to synchronize VMware vSphere and Proxmox VE virtual machines into NetBox."
 readme = "README.md"
 requires-python = ">=3.12"

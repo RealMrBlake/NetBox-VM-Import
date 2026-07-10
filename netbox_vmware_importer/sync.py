@@ -14,8 +14,10 @@ from .choices import EndpointAuthMethodChoices, EndpointProviderChoices
 
 try:
     import requests
+    from requests.adapters import HTTPAdapter
     from urllib3.exceptions import InsecureRequestWarning
 except ImportError:  # pragma: no cover - handled at runtime inside NetBox
+    HTTPAdapter = None
     requests = None
     InsecureRequestWarning = None
 
@@ -81,6 +83,30 @@ class VMwareConnectionError(RuntimeError):
 
 class ProxmoxConnectionError(RuntimeError):
     pass
+
+
+class ProxmoxTLSCompatibilityAdapter(HTTPAdapter):
+    def __init__(self, validate_ssl=True, *args, **kwargs):
+        self.validate_ssl = validate_ssl
+        super().__init__(*args, **kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        pool_kwargs["ssl_context"] = self._build_ssl_context()
+        return super().init_poolmanager(connections, maxsize, block=block, **pool_kwargs)
+
+    def proxy_manager_for(self, *args, **kwargs):
+        kwargs["ssl_context"] = self._build_ssl_context()
+        return super().proxy_manager_for(*args, **kwargs)
+
+    def _build_ssl_context(self):
+        context = ssl.create_default_context()
+        if hasattr(ssl, "TLSVersion"):
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            context.maximum_version = ssl.TLSVersion.TLSv1_2
+        if not self.validate_ssl:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+        return context
 
 
 class VMwareClient:
@@ -244,6 +270,8 @@ class ProxmoxClient:
         self.session = requests.Session()
         self.session.trust_env = False
         self.session.verify = self.endpoint.validate_ssl
+        if HTTPAdapter is not None:
+            self.session.mount("https://", ProxmoxTLSCompatibilityAdapter(validate_ssl=self.endpoint.validate_ssl))
         self.session.headers.update(
             {
                 "Accept": "application/json",

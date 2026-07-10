@@ -58,6 +58,8 @@ Der Proxmox-Client ignoriert Proxy-Umgebungsvariablen des NetBox-Dienstes, damit
 
 Der unauthentifizierte Proxmox-`version`-Probe ist nur diagnostisch. Wenn er haengt, versucht das Plugin den eigentlichen Login trotzdem.
 
+Proxmox-API-Verbindungen nutzen TLS 1.2-Kompatibilitaetsmodus, weil einige Firewalls oder TLS-Inspektionspfade moderne TLS-1.3-ClientHellos blockieren.
+
 Wenn Passwort-Login auf `access/ticket` haengt, zuerst den Realm im Benutzernamen pruefen (`root@pam`, `user@pve`, `user@ldaprealm`). Fuer produktive Imports ist ein Proxmox API-Token meistens stabiler als Passwort-Login.
 
 Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.
