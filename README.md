@@ -54,6 +54,8 @@ sudo systemctl restart netbox netbox-rq
 
 Bei selbstsignierten Proxmox-Zertifikaten `Validate SSL` deaktiviert lassen. Wenn Proxmox langsam antwortet, kann `API timeout` am Endpoint erhoeht werden.
 
+Der Proxmox-Client ignoriert Proxy-Umgebungsvariablen des NetBox-Dienstes, damit interne Proxmox-Adressen nicht versehentlich ueber einen HTTPS-Proxy laufen.
+
 Wenn Passwort-Login auf `access/ticket` haengt, zuerst den Realm im Benutzernamen pruefen (`root@pam`, `user@pve`, `user@ldaprealm`). Fuer produktive Imports ist ein Proxmox API-Token meistens stabiler als Passwort-Login.
 
 Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.

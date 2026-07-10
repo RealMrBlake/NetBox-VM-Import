@@ -242,6 +242,7 @@ class ProxmoxClient:
             raise ProxmoxConnectionError("Proxmox username must include a realm, e.g. root@pam or user@pve.")
 
         self.session = requests.Session()
+        self.session.trust_env = False
         self.session.verify = self.endpoint.validate_ssl
         if not self.endpoint.validate_ssl and InsecureRequestWarning is not None:
             requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
