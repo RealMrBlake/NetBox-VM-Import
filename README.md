@@ -56,6 +56,8 @@ Bei selbstsignierten Proxmox-Zertifikaten `Validate SSL` deaktiviert lassen. Wen
 
 Der Proxmox-Client ignoriert Proxy-Umgebungsvariablen des NetBox-Dienstes, damit interne Proxmox-Adressen nicht versehentlich ueber einen HTTPS-Proxy laufen.
 
+Der unauthentifizierte Proxmox-`version`-Probe ist nur diagnostisch. Wenn er haengt, versucht das Plugin den eigentlichen Login trotzdem.
+
 Wenn Passwort-Login auf `access/ticket` haengt, zuerst den Realm im Benutzernamen pruefen (`root@pam`, `user@pve`, `user@ldaprealm`). Fuer produktive Imports ist ein Proxmox API-Token meistens stabiler als Passwort-Login.
 
 Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.
