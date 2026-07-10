@@ -1,0 +1,58 @@
+# NetBox VMware Importer
+
+NetBox plugin zum Synchronisieren von VMware vSphere/vCenter VMs nach NetBox.
+
+## Funktionen
+
+- vCenter/ESXi-Ziele direkt in der NetBox-Weboberflaeche pflegen
+- Pro Ziel Tenant, Site und NetBox-Cluster hinterlegen
+- Manuelle Synchronisation per Button
+- Optionale automatische Synchronisation ueber ein Minutenintervall
+- Import von VM-Name, Status, vCPU, RAM, Disk, Plattform, Interfaces, MAC-Adressen und IPs
+- Primaere IPv4/IPv6 wird anhand der ersten gefundenen Gast-IP gesetzt
+- Multi-Tenant-sicherer VM-Abgleich ueber `name + cluster`
+
+Das Plugin loescht bewusst keine verwaisten VMs, Interfaces oder IP-Adressen. Damit bleibt der erste Rollout konservativ und vermeidet Datenverlust, wenn VMware-Gastdaten unvollstaendig sind.
+
+## Installation
+
+Im Python-Environment der NetBox-Installation:
+
+```bash
+pip install /path/to/netbox-vmware-importer
+```
+
+In `configuration.py` aktivieren:
+
+```python
+PLUGINS = [
+    "netbox_vmware_importer",
+]
+```
+
+Danach Migrationen anwenden und NetBox/RQ neu starten:
+
+```bash
+python manage.py migrate netbox_vmware_importer
+sudo systemctl restart netbox netbox-rq
+```
+
+## Nutzung
+
+1. In NetBox unter `VMware Import > vCenter Endpoints` ein Ziel anlegen.
+2. vCenter Host, Port, Benutzername und Passwort eintragen.
+3. Tenant, Site und Cluster fuer den Kunden auswaehlen.
+4. Optional Regex-Filter und Sync-Intervall setzen.
+5. Auf der Detailseite `Sync jetzt starten` ausfuehren.
+
+Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.
+
+## Sicherheit
+
+Das vCenter-Passwort wird verschluesselt in der Plugin-Tabelle gespeichert. Der Schluessel wird aus `SECRET_KEY` abgeleitet. Wenn `SECRET_KEY` rotiert wird, muessen die vCenter-Passwoerter in den Endpoints erneut gesetzt werden.
+
+Fuer sehr strenge Umgebungen ist ein externer Secret-Store wie Vault als naechster sinnvoller Ausbaupunkt vorgesehen.
+
+## VMware-Datenqualitaet
+
+IP-Adressen kommen aus den VMware Guest Tools. Ohne laufende bzw. aktuelle VMware Tools koennen Interfaces und IPs fehlen oder veraltet sein.
