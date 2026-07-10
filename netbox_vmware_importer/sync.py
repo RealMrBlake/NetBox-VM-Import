@@ -233,15 +233,20 @@ class ProxmoxClient:
         self.session = None
         self.base_url = f"https://{endpoint.host}:{endpoint.port}/api2/json"
         self.timeout = (10, endpoint.request_timeout_seconds or 120)
+        self.api_probe_succeeded = False
 
     def __enter__(self):
         if requests is None:
             raise ProxmoxConnectionError("requests is not installed in the NetBox Python environment.")
+        if "@" not in self.endpoint.username:
+            raise ProxmoxConnectionError("Proxmox username must include a realm, e.g. root@pam or user@pve.")
 
         self.session = requests.Session()
         self.session.verify = self.endpoint.validate_ssl
         if not self.endpoint.validate_ssl and InsecureRequestWarning is not None:
             requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+
+        self._probe_api_availability()
 
         if self.endpoint.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN:
             token_id = self.endpoint.token_name if "!" in self.endpoint.token_name else f"{self.endpoint.username}!{self.endpoint.token_name}"
@@ -254,6 +259,10 @@ class ProxmoxClient:
     def __exit__(self, exc_type, exc_value, traceback):
         if self.session is not None:
             self.session.close()
+
+    def _probe_api_availability(self):
+        self._request("GET", "version")
+        self.api_probe_succeeded = True
 
     def _authenticate_with_password(self):
         response = self._request(
@@ -284,9 +293,18 @@ class ProxmoxClient:
             response = self.session.request(method, url, timeout=self.timeout, **kwargs)
             response.raise_for_status()
             return response
-        except requests.Timeout as exc:
+        except requests.ConnectTimeout as exc:
             raise ProxmoxConnectionError(
-                f"Proxmox API {method} {path} timed out after {self.timeout[1]} seconds."
+                f"Proxmox API {method} {path} connect timed out after {self.timeout[0]} seconds."
+            ) from exc
+        except requests.ReadTimeout as exc:
+            detail = f"Proxmox API {method} {path} read timed out after {self.timeout[1]} seconds."
+            if path == "access/ticket" and self.api_probe_succeeded:
+                detail += " API version endpoint responded, so the delay is likely in Proxmox authentication. Check username realm (e.g. root@pam), PAM/LDAP auth, two-factor auth, or use an API token."
+            raise ProxmoxConnectionError(detail) from exc
+        except requests.exceptions.SSLError as exc:
+            raise ProxmoxConnectionError(
+                f"Proxmox API {method} {path} TLS validation failed. Disable Validate SSL for self-signed certificates or install the CA certificate. Details: {exc}"
             ) from exc
         except requests.RequestException as exc:
             raise ProxmoxConnectionError(f"Proxmox API {method} {path} failed: {exc}") from exc

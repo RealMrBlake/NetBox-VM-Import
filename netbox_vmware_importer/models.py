@@ -241,6 +241,8 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
                 raise ValidationError({"auth_method": _("VMware endpoints currently support username/password authentication only.")})
 
         if self.provider == EndpointProviderChoices.PROVIDER_PROXMOX:
+            if "@" not in self.username:
+                raise ValidationError({"username": _("Proxmox usernames must include a realm, e.g. root@pam or user@pve.")})
             if self.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN and not self.token_name:
                 raise ValidationError({"token_name": _("A token name is required for Proxmox API token authentication.")})
 

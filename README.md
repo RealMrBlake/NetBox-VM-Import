@@ -47,12 +47,14 @@ sudo systemctl restart netbox netbox-rq
 1. In NetBox unter `VM Import > Endpoints` ein Ziel anlegen.
 2. Provider auswaehlen.
 3. VMware: vCenter Host, Port, Benutzername und Passwort eintragen.
-4. Proxmox: Proxmox Host, Port `8006`, Benutzername und Passwort oder API-Token eintragen.
+4. Proxmox: Proxmox Host, Port `8006`, Benutzername inklusive Realm und Passwort oder API-Token eintragen, z. B. `root@pam`.
 5. Tenant, Site und Cluster fuer den Kunden auswaehlen.
 6. Optional Regex-Filter und Sync-Intervall setzen.
 7. Auf der Detailseite `Sync jetzt starten` ausfuehren.
 
 Bei selbstsignierten Proxmox-Zertifikaten `Validate SSL` deaktiviert lassen. Wenn Proxmox langsam antwortet, kann `API timeout` am Endpoint erhoeht werden.
+
+Wenn Passwort-Login auf `access/ticket` haengt, zuerst den Realm im Benutzernamen pruefen (`root@pam`, `user@pve`, `user@ldaprealm`). Fuer produktive Imports ist ein Proxmox API-Token meistens stabiler als Passwort-Login.
 
 Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.
 
