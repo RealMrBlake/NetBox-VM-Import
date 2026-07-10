@@ -19,8 +19,10 @@ Das Plugin loescht bewusst keine verwaisten VMs, Interfaces oder IP-Adressen. Da
 Im Python-Environment der NetBox-Installation:
 
 ```bash
-pip install /path/to/netbox-vmware-importer
+pip install git+https://git.mrblake.cc/MrBlake/NetBox-VM-Import.git
 ```
+
+NetBox selbst ist keine `pip`-Dependency des Plugins. Das Plugin wird im vorhandenen NetBox-Virtualenv installiert und bringt nur externe Bibliotheken wie `pyvmomi` und `cryptography` mit.
 
 In `configuration.py` aktivieren:
 
