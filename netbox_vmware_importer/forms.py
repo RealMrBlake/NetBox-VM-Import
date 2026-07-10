@@ -83,13 +83,13 @@ class VCenterEndpointForm(NetBoxModelForm):
         )
 
     def clean(self):
-        cleaned_data = super().clean()
-        password = cleaned_data.get("password")
+        super().clean()
+        password = self.cleaned_data.get("password")
 
         if not self.instance.pk and not password:
             raise ValidationError({"password": _("A password is required for new endpoints.")})
 
-        return cleaned_data
+        return self.cleaned_data
 
     def save(self, commit=True):
         obj = super().save(commit=False)
