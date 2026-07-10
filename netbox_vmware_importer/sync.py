@@ -5,9 +5,10 @@ from dataclasses import dataclass, field
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
+from django.db.models import Sum
 from dcim.models import Platform
 from ipam.models import IPAddress
-from virtualization.models import VMInterface, VirtualMachine
+from virtualization.models import VMInterface, VirtualDisk, VirtualMachine
 
 try:
     from pyVim.connect import Disconnect, SmartConnect
@@ -26,6 +27,13 @@ class InterfaceData:
 
 
 @dataclass
+class DiskData:
+    name: str
+    size_mb: int
+    description: str = ""
+
+
+@dataclass
 class VMData:
     name: str
     status: str
@@ -33,6 +41,7 @@ class VMData:
     memory_mb: int
     disk_mb: int
     guest_os: str = ""
+    disks: list[DiskData] = field(default_factory=list)
     interfaces: list[InterfaceData] = field(default_factory=list)
 
 
@@ -49,6 +58,9 @@ class SyncResult:
     ip_addresses_created: int = 0
     ip_addresses_updated: int = 0
     ip_conflicts: int = 0
+    virtual_disks_created: int = 0
+    virtual_disks_updated: int = 0
+    virtual_disks_deleted: int = 0
 
 
 class VMwareConnectionError(RuntimeError):
@@ -101,7 +113,8 @@ class VMwareClient:
 
         memory_mb = int(getattr(hardware, "memoryMB", 0) or 0)
         vcpus = int(getattr(hardware, "numCPU", 0) or 0)
-        disk_mb = self._get_disk_size_mb(hardware)
+        disks = self._get_disks(hardware)
+        disk_mb = sum(disk.size_mb for disk in disks)
         guest_os = getattr(config, "guestFullName", "") or ""
         power_state = str(getattr(getattr(vm_obj, "runtime", None), "powerState", ""))
         status = "active" if "poweredOn" in power_state else "offline"
@@ -113,16 +126,64 @@ class VMwareClient:
             memory_mb=memory_mb,
             disk_mb=disk_mb,
             guest_os=guest_os,
+            disks=disks,
             interfaces=self._get_interfaces(vm_obj),
         )
 
     @staticmethod
-    def _get_disk_size_mb(hardware):
-        disk_mb = 0
+    def _get_disks(hardware):
+        disks = []
+        used_names = set()
+        disk_index = 0
+
         for device in getattr(hardware, "device", []) or []:
             if isinstance(device, vim.vm.device.VirtualDisk):
-                disk_mb += round((device.capacityInKB or 0) / 1024)
-        return disk_mb
+                disk_index += 1
+                name = VMwareClient._unique_disk_name(device, disk_index, used_names)
+                disks.append(
+                    DiskData(
+                        name=name,
+                        size_mb=round((device.capacityInKB or 0) / 1024),
+                        description=VMwareClient._disk_description(device),
+                    )
+                )
+
+        return disks
+
+    @staticmethod
+    def _unique_disk_name(device, disk_index, used_names):
+        device_info = getattr(device, "deviceInfo", None)
+        base_name = getattr(device_info, "label", None) or f"Hard disk {disk_index}"
+        base_name = VMwareClient._truncate_component_name(str(base_name).strip() or f"Hard disk {disk_index}")
+
+        name = base_name
+        suffix = 2
+        while name in used_names:
+            suffix_text = f" ({suffix})"
+            name = f"{base_name[:64 - len(suffix_text)]}{suffix_text}"
+            suffix += 1
+
+        used_names.add(name)
+        return name
+
+    @staticmethod
+    def _truncate_component_name(value):
+        return value[:64]
+
+    @staticmethod
+    def _disk_description(device):
+        backing = getattr(device, "backing", None)
+        filename = getattr(backing, "fileName", None)
+        thin_provisioned = getattr(backing, "thinProvisioned", None)
+
+        parts = []
+        if filename:
+            parts.append(str(filename))
+        if thin_provisioned is not None:
+            parts.append("thin" if thin_provisioned else "thick")
+
+        detail = ", ".join(parts) if parts else f"key={getattr(device, 'key', 'unknown')}"
+        return f"VMware: {detail}"[:200]
 
     @staticmethod
     def _get_interfaces(vm_obj):
@@ -205,9 +266,11 @@ class VMwareImporter:
         nb_vm.status = vm_data.status
         nb_vm.vcpus = vm_data.vcpus
         nb_vm.memory = vm_data.memory_mb
-        nb_vm.disk = vm_data.disk_mb
         nb_vm.tenant = self.endpoint.tenant
         nb_vm.platform = self._match_platform(vm_data.guest_os, platforms)
+
+        if created or not nb_vm.virtualdisks.exists():
+            nb_vm.disk = vm_data.disk_mb
 
         nb_vm.full_clean()
         nb_vm.save()
@@ -218,6 +281,8 @@ class VMwareImporter:
         else:
             result.updated += 1
             self.logger.info("Updated VM %s", vm_data.name)
+
+        self._sync_virtual_disks(nb_vm, vm_data, result)
 
         if self.endpoint.sync_interfaces:
             primary_ipv4, primary_ipv6 = self._sync_interfaces(nb_vm, vm_data, result)
@@ -234,6 +299,55 @@ class VMwareImporter:
                 return platform
 
         return None
+
+    def _sync_virtual_disks(self, nb_vm, vm_data, result):
+        if not vm_data.disks:
+            return
+
+        synced_names = set()
+
+        for disk_data in vm_data.disks:
+            synced_names.add(disk_data.name)
+            virtual_disk = VirtualDisk.objects.filter(
+                virtual_machine=nb_vm,
+                name=disk_data.name,
+            ).first()
+            created = virtual_disk is None
+
+            if created:
+                virtual_disk = VirtualDisk(
+                    virtual_machine=nb_vm,
+                    name=disk_data.name,
+                )
+
+            virtual_disk.size = disk_data.size_mb
+            virtual_disk.description = disk_data.description
+            virtual_disk.full_clean()
+            virtual_disk.save()
+
+            if created:
+                result.virtual_disks_created += 1
+                self.logger.info("Created virtual disk %s on %s", disk_data.name, nb_vm.name)
+            else:
+                result.virtual_disks_updated += 1
+                self.logger.info("Updated virtual disk %s on %s", disk_data.name, nb_vm.name)
+
+        stale_disks = VirtualDisk.objects.filter(
+            virtual_machine=nb_vm,
+            description__startswith="VMware:",
+        ).exclude(name__in=synced_names)
+        stale_count = stale_disks.count()
+        if stale_count:
+            stale_disks.delete()
+            result.virtual_disks_deleted += stale_count
+            self.logger.info("Deleted %s stale VMware virtual disk(s) from %s", stale_count, nb_vm.name)
+
+        disk_total = nb_vm.virtualdisks.aggregate(total=Sum("size", default=0))["total"] or vm_data.disk_mb
+        if nb_vm.disk != disk_total:
+            nb_vm.disk = disk_total
+            nb_vm.full_clean()
+            nb_vm.save(update_fields=("disk",))
+            self.logger.info("Updated aggregate disk size for %s to %s MB", nb_vm.name, disk_total)
 
     def _sync_interfaces(self, nb_vm, vm_data, result):
         primary_ipv4 = None

@@ -9,6 +9,7 @@ NetBox plugin zum Synchronisieren von VMware vSphere/vCenter VMs nach NetBox.
 - Manuelle Synchronisation per Button
 - Optionale automatische Synchronisation ueber ein Minutenintervall
 - Import von VM-Name, Status, vCPU, RAM, Disk, Plattform, Interfaces, MAC-Adressen und IPs
+- Virtuelle VMware-Festplatten werden als NetBox Virtual Disks mit Groesse und Backing-Info dokumentiert
 - Primaere IPv4/IPv6 wird anhand der ersten gefundenen Gast-IP gesetzt
 - Multi-Tenant-sicherer VM-Abgleich ueber `name + cluster`
 

@@ -57,12 +57,18 @@ class SyncVCenterEndpointJob(JobRunner):
 
         endpoint.mark_success(result)
         self.logger.info(
-            "VMware sync finished for %s: %s VM(s), %s created, %s updated, %s skipped.",
+            (
+                "VMware sync finished for %s: %s VM(s), %s created, %s updated, %s skipped; "
+                "virtual disks: %s created, %s updated, %s deleted."
+            ),
             endpoint.name,
             result.synced,
             result.created,
             result.updated,
             result.skipped,
+            result.virtual_disks_created,
+            result.virtual_disks_updated,
+            result.virtual_disks_deleted,
         )
 
 

@@ -5,7 +5,7 @@ class VMwareImporterConfig(PluginConfig):
     name = "netbox_vmware_importer"
     verbose_name = "VMware Importer"
     description = "Synchronize VMware vSphere virtual machines into NetBox."
-    version = "0.1.6"
+    version = "0.1.7"
     author = "Internal NetBox Team"
     base_url = "vmware-importer"
     min_version = "4.4.0"
