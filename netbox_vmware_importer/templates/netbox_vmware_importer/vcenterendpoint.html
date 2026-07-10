@@ -1,0 +1,136 @@
+{% extends 'generic/object.html' %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h5 class="card-header">vCenter</h5>
+      <table class="table table-hover attr-table">
+        <tr>
+          <th scope="row">Name</th>
+          <td>{{ object.name }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Host</th>
+          <td>{{ object.host }}:{{ object.port }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Username</th>
+          <td>{{ object.username }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Enabled</th>
+          <td>{{ object.enabled|yesno:"Yes,No" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Validate SSL</th>
+          <td>{{ object.validate_ssl|yesno:"Yes,No" }}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="col col-md-6">
+    <div class="card">
+      <h5 class="card-header">NetBox Target</h5>
+      <table class="table table-hover attr-table">
+        <tr>
+          <th scope="row">Tenant</th>
+          <td>{{ object.tenant|default:"-" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Site</th>
+          <td>{{ object.site|default:"-" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Cluster</th>
+          <td>{{ object.cluster }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Sync interval</th>
+          <td>{{ object.sync_interval_minutes|default:"Manual only" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Next sync</th>
+          <td>{{ object.next_sync_at|default:"-" }}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h5 class="card-header">Sync</h5>
+      <table class="table table-hover attr-table">
+        <tr>
+          <th scope="row">Last status</th>
+          <td>{{ object.get_last_status_display }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Last sync</th>
+          <td>{{ object.last_sync_at|default:"-" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Last success</th>
+          <td>{{ object.last_success_at|default:"-" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">VMs</th>
+          <td>{{ object.last_vm_count }} total, {{ object.last_created_count }} created, {{ object.last_updated_count }} updated, {{ object.last_error_count }} errors</td>
+        </tr>
+        <tr>
+          <th scope="row">Message</th>
+          <td>{{ object.last_message|default:"-" }}</td>
+        </tr>
+      </table>
+      {% if perms.netbox_vmware_importer.change_vcenterendpoint %}
+      <div class="card-footer">
+        <form method="post" action="{% url 'plugins:netbox_vmware_importer:vcenterendpoint_sync' pk=object.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">
+            <i class="mdi mdi-sync"></i> Sync jetzt starten
+          </button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col col-md-6">
+    <div class="card">
+      <h5 class="card-header">Filters</h5>
+      <table class="table table-hover attr-table">
+        <tr>
+          <th scope="row">Include regex</th>
+          <td>{{ object.include_name_regex|default:"-" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Exclude regex</th>
+          <td>{{ object.exclude_name_regex|default:"-" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Powered off VMs</th>
+          <td>{{ object.sync_powered_off|yesno:"Synced,Skipped" }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Interfaces/IPs</th>
+          <td>{{ object.sync_interfaces|yesno:"Interfaces on,Interfaces off" }} / {{ object.sync_ip_addresses|yesno:"IPs on,IPs off" }}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% if object.comments %}
+<div class="row mb-3">
+  <div class="col">
+    <div class="card">
+      <h5 class="card-header">Comments</h5>
+      <div class="card-body rendered-markdown">
+        {{ object.comments|linebreaksbr }}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock content %}
