@@ -1,3 +1,4 @@
+from core.choices import JobStatusChoices
 from core.exceptions import JobFailed
 from django.utils import timezone
 from netbox.jobs import JobRunner, system_job
@@ -5,6 +6,29 @@ from netbox.jobs import JobRunner, system_job
 from .choices import SyncStatusChoices
 from .models import VCenterEndpoint
 from .sync import VMwareImporter
+
+
+def clear_endpoint_sync_schedule(endpoint):
+    return SyncVCenterEndpointJob.get_jobs(endpoint).filter(
+        status__in=JobStatusChoices.ENQUEUED_STATE_CHOICES,
+        interval__isnull=False,
+    ).delete()
+
+
+def schedule_endpoint_sync(endpoint):
+    if not endpoint.enabled or not endpoint.sync_interval_minutes:
+        clear_endpoint_sync_schedule(endpoint)
+        return None
+
+    if not endpoint.next_sync_at:
+        endpoint.next_sync_at = timezone.now()
+        VCenterEndpoint.objects.filter(pk=endpoint.pk).update(next_sync_at=endpoint.next_sync_at)
+
+    return SyncVCenterEndpointJob.enqueue_once(
+        instance=endpoint,
+        schedule_at=endpoint.next_sync_at,
+        interval=endpoint.sync_interval_minutes,
+    )
 
 
 class SyncVCenterEndpointJob(JobRunner):
@@ -59,7 +83,8 @@ class SyncVCenterEndpointJob(JobRunner):
         self.logger.info(
             (
                 "VMware sync finished for %s: %s VM(s), %s created, %s updated, %s skipped; "
-                "virtual disks: %s created, %s updated, %s deleted."
+                "virtual disks: %s created, %s updated, %s deleted; "
+                "MAC addresses: %s created, %s updated, %s deleted."
             ),
             endpoint.name,
             result.synced,
@@ -69,6 +94,9 @@ class SyncVCenterEndpointJob(JobRunner):
             result.virtual_disks_created,
             result.virtual_disks_updated,
             result.virtual_disks_deleted,
+            result.mac_addresses_created,
+            result.mac_addresses_updated,
+            result.mac_addresses_deleted,
         )
 
 
@@ -79,18 +107,17 @@ class ScheduleDueVCenterSyncsJob(JobRunner):
 
     def run(self, *args, **kwargs):
         now = timezone.now()
-        due_endpoints = VCenterEndpoint.objects.filter(
+        enabled_endpoints = VCenterEndpoint.objects.filter(
             enabled=True,
             sync_interval_minutes__isnull=False,
-        ).filter(next_sync_at__lte=now)
+        )
 
-        queued = 0
-        for endpoint in due_endpoints:
-            SyncVCenterEndpointJob.enqueue_once(instance=endpoint)
-            endpoint.last_status = SyncStatusChoices.STATUS_QUEUED
-            endpoint.last_message = "Automatic sync job queued."
-            endpoint.set_next_sync(now)
-            endpoint.save(update_fields=("last_status", "last_message", "next_sync_at", "last_updated"))
-            queued += 1
+        scheduled = 0
+        for endpoint in enabled_endpoints:
+            if endpoint.next_sync_at is None:
+                endpoint.next_sync_at = now
+                endpoint.save(update_fields=("next_sync_at", "last_updated"))
+            if schedule_endpoint_sync(endpoint):
+                scheduled += 1
 
-        self.logger.info("Queued %s VMware sync job(s).", queued)
+        self.logger.info("Ensured %s VMware endpoint sync schedule(s).", scheduled)

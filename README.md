@@ -9,6 +9,7 @@ NetBox plugin zum Synchronisieren von VMware vSphere/vCenter VMs nach NetBox.
 - Manuelle Synchronisation per Button
 - Optionale automatische Synchronisation ueber ein Minutenintervall
 - Import von VM-Name, Status, vCPU, RAM, Disk, Plattform, Interfaces, MAC-Adressen und IPs
+- MAC-Adressen werden als NetBox MAC Address Objekte am VM-Interface angelegt und als primaere MAC gesetzt
 - Virtuelle VMware-Festplatten werden als NetBox Virtual Disks mit Groesse und Backing-Info dokumentiert
 - Primaere IPv4/IPv6 wird anhand der ersten gefundenen Gast-IP gesetzt
 - Multi-Tenant-sicherer VM-Abgleich ueber `name + cluster`
@@ -49,6 +50,8 @@ sudo systemctl restart netbox netbox-rq
 5. Auf der Detailseite `Sync jetzt starten` ausfuehren.
 
 Wenn `Sync interval minutes` gesetzt ist, prueft ein Systemjob alle fuenf Minuten, welche Endpoints faellig sind, und stellt die eigentlichen Sync-Jobs in die Queue.
+
+Ab Version `0.1.8` wird beim Speichern eines Endpoints zusaetzlich ein wiederkehrender NetBox-Job fuer genau diesen Endpoint geplant. Nach einem Update vorhandene Endpoints einmal speichern oder `netbox-rq` neu starten und bis zum naechsten Systemjob-Lauf warten.
 
 ## Sicherheit
 

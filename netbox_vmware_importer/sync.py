@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Sum
-from dcim.models import Platform
+from dcim.models import MACAddress, Platform
 from ipam.models import IPAddress
 from virtualization.models import VMInterface, VirtualDisk, VirtualMachine
 
@@ -58,6 +58,9 @@ class SyncResult:
     ip_addresses_created: int = 0
     ip_addresses_updated: int = 0
     ip_conflicts: int = 0
+    mac_addresses_created: int = 0
+    mac_addresses_updated: int = 0
+    mac_addresses_deleted: int = 0
     virtual_disks_created: int = 0
     virtual_disks_updated: int = 0
     virtual_disks_deleted: int = 0
@@ -214,11 +217,13 @@ class VMwareImporter:
         self.include_pattern = re.compile(endpoint.include_name_regex) if endpoint.include_name_regex else None
         self.exclude_pattern = re.compile(endpoint.exclude_name_regex) if endpoint.exclude_name_regex else None
         self.interface_content_type = None
+        self.mac_address_content_type = None
 
     def sync(self):
         result = SyncResult()
         platforms = list(Platform.objects.all())
         self.interface_content_type = ContentType.objects.get_for_model(VMInterface)
+        self.mac_address_content_type = ContentType.objects.get_for_model(VMInterface)
 
         with VMwareClient(self.endpoint) as client:
             for vm_data in client.iter_virtual_machines():
@@ -366,7 +371,6 @@ class VMwareImporter:
                     name=interface_data.name,
                 )
 
-            vm_interface.mac_address = interface_data.mac_address
             vm_interface.enabled = True
             vm_interface.full_clean()
             vm_interface.save()
@@ -377,6 +381,8 @@ class VMwareImporter:
             else:
                 result.interfaces_updated += 1
                 self.logger.info("Updated interface %s on %s", interface_data.name, nb_vm.name)
+
+            self._sync_mac_address(vm_interface, interface_data.mac_address, result)
 
             if not self.endpoint.sync_ip_addresses:
                 continue
@@ -397,6 +403,69 @@ class VMwareImporter:
                     primary_ipv6 = ip_obj
 
         return primary_ipv4, primary_ipv6
+
+    def _sync_mac_address(self, vm_interface, mac_address, result):
+        normalized_mac = self._normalize_mac_address(mac_address)
+        if normalized_mac is None:
+            return None
+
+        mac_obj = MACAddress.objects.filter(
+            assigned_object_type=self.mac_address_content_type,
+            assigned_object_id=vm_interface.pk,
+            mac_address=normalized_mac,
+        ).first()
+        created = mac_obj is None
+
+        if created:
+            mac_obj = MACAddress(
+                mac_address=normalized_mac,
+                assigned_object=vm_interface,
+            )
+
+        mac_obj.description = "VMware reported MAC address"
+        mac_obj.full_clean()
+        mac_obj.save()
+
+        if created:
+            result.mac_addresses_created += 1
+            self.logger.info("Created MAC address %s on interface %s", normalized_mac, vm_interface.name)
+        else:
+            result.mac_addresses_updated += 1
+            self.logger.info("Updated MAC address %s on interface %s", normalized_mac, vm_interface.name)
+
+        if vm_interface.primary_mac_address_id != mac_obj.pk:
+            vm_interface.primary_mac_address = mac_obj
+            vm_interface.full_clean()
+            vm_interface.save(update_fields=("primary_mac_address",))
+            self.logger.info("Set primary MAC address %s on interface %s", normalized_mac, vm_interface.name)
+
+        stale_macs = MACAddress.objects.filter(
+            assigned_object_type=self.mac_address_content_type,
+            assigned_object_id=vm_interface.pk,
+            description="VMware reported MAC address",
+        ).exclude(pk=mac_obj.pk)
+        stale_count = stale_macs.count()
+        if stale_count:
+            stale_macs.delete()
+            result.mac_addresses_deleted += stale_count
+            self.logger.info("Deleted %s stale VMware MAC address(es) from interface %s", stale_count, vm_interface.name)
+
+        return mac_obj
+
+    @staticmethod
+    def _normalize_mac_address(mac_address):
+        if not mac_address:
+            return None
+
+        value = str(mac_address).strip().replace("-", ":").lower()
+        parts = value.split(":")
+        if len(parts) != 6:
+            return None
+
+        try:
+            return ":".join(f"{int(part, 16):02x}" for part in parts)
+        except ValueError:
+            return None
 
     def _normalize_ip_address(self, raw_ip):
         if not raw_ip:
