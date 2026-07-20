@@ -291,7 +291,7 @@ class ProxmoxClient:
         if "@" not in self.endpoint.username:
             raise ProxmoxConnectionError("Proxmox username must include a realm, e.g. root@pam or user@pve.")
 
-        if ProxmoxSDK is not None:
+        if self._should_use_sdk():
             self._connect_with_sdk()
             return self
 
@@ -326,6 +326,14 @@ class ProxmoxClient:
         if ":" in host and not host.startswith("["):
             return f"[{host}]"
         return host
+
+    def _should_use_sdk(self):
+        # proxmox-sdk 0.0.12 builds password ticket URLs without /api2/json.
+        # Keep it for stateless API-token auth, where no ticket endpoint is used.
+        return (
+            ProxmoxSDK is not None
+            and self.endpoint.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN
+        )
 
     def _connect_with_sdk(self):
         user = (self.endpoint.username or "").strip()

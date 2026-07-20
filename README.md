@@ -54,7 +54,7 @@ sudo systemctl restart netbox netbox-rq
 
 Bei selbstsignierten Proxmox-Zertifikaten `Validate SSL` deaktiviert lassen. Wenn Proxmox langsam antwortet, kann `API timeout` am Endpoint erhoeht werden.
 
-Der Proxmox-Client nutzt bevorzugt `proxmox-sdk` wie `netbox-proxbox`/`proxbox-api`. Falls dieses Paket nicht installiert ist, faellt er auf den bisherigen `requests`-Client zurueck. Proxy-Umgebungsvariablen des NetBox-Dienstes werden im Fallback ignoriert, damit interne Proxmox-Adressen nicht versehentlich ueber einen HTTPS-Proxy laufen.
+Der Proxmox-Client nutzt fuer API-Token bevorzugt `proxmox-sdk` wie `netbox-proxbox`/`proxbox-api`. Passwort-Logins laufen ueber den eigenen `requests`-Client, weil `proxmox-sdk==0.0.12` die Ticket-URL fuer Passwort-Authentifizierung ohne `/api2/json` aufbaut. Proxy-Umgebungsvariablen des NetBox-Dienstes werden im `requests`-Client ignoriert, damit interne Proxmox-Adressen nicht versehentlich ueber einen HTTPS-Proxy laufen.
 
 Im `requests`-Fallback ist der unauthentifizierte Proxmox-`version`-Probe nur diagnostisch. Wenn er haengt, versucht das Plugin den eigentlichen Login trotzdem. Im bevorzugten SDK-Pfad wird `version` als erste SDK-Anfrage genutzt und authentifiziert dabei automatisch.
 
