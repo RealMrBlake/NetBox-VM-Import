@@ -3,7 +3,7 @@ from core.exceptions import JobFailed
 from django.utils import timezone
 from netbox.jobs import JobRunner, system_job
 
-from .choices import SyncStatusChoices
+from .choices import EndpointProviderChoices, SyncStatusChoices
 from .models import VCenterEndpoint
 from .sync import VMwareImporter
 
@@ -16,6 +16,10 @@ def clear_endpoint_sync_schedule(endpoint):
 
 
 def schedule_endpoint_sync(endpoint):
+    if endpoint.provider != EndpointProviderChoices.PROVIDER_VMWARE:
+        clear_endpoint_sync_schedule(endpoint)
+        return None
+
     if not endpoint.enabled or not endpoint.sync_interval_minutes:
         clear_endpoint_sync_schedule(endpoint)
         return None
@@ -44,6 +48,12 @@ class SyncVCenterEndpointJob(JobRunner):
         if not endpoint.enabled:
             endpoint.mark_failure("Endpoint is disabled.")
             raise JobFailed("Endpoint is disabled.")
+
+        if endpoint.provider != EndpointProviderChoices.PROVIDER_VMWARE:
+            message = "Legacy Proxmox endpoints are no longer supported. Delete this endpoint."
+            clear_endpoint_sync_schedule(endpoint)
+            endpoint.mark_failure(message)
+            raise JobFailed(message)
 
         self.logger.info("Starting VM sync for %s (%s)", endpoint.name, endpoint.host)
         endpoint.mark_running()
@@ -107,8 +117,15 @@ class ScheduleDueVCenterSyncsJob(JobRunner):
 
     def run(self, *args, **kwargs):
         now = timezone.now()
+        legacy_endpoints = VCenterEndpoint.objects.exclude(provider=EndpointProviderChoices.PROVIDER_VMWARE)
+        cleared = 0
+        for endpoint in legacy_endpoints:
+            deleted_count, _ = clear_endpoint_sync_schedule(endpoint)
+            cleared += deleted_count
+
         enabled_endpoints = VCenterEndpoint.objects.filter(
             enabled=True,
+            provider=EndpointProviderChoices.PROVIDER_VMWARE,
             sync_interval_minutes__isnull=False,
         )
 
@@ -120,4 +137,4 @@ class ScheduleDueVCenterSyncsJob(JobRunner):
             if schedule_endpoint_sync(endpoint):
                 scheduled += 1
 
-        self.logger.info("Ensured %s endpoint sync schedule(s).", scheduled)
+        self.logger.info("Ensured %s VMware endpoint sync schedule(s); cleared %s legacy schedule(s).", scheduled, cleared)

@@ -34,7 +34,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     )
     host = models.CharField(
         max_length=255,
-        help_text=_("vCenter, ESXi, or Proxmox VE hostname or IP address"),
+        help_text=_("vCenter or ESXi hostname or IP address"),
     )
     port = models.PositiveIntegerField(
         default=443,
@@ -51,7 +51,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     token_name = models.CharField(
         max_length=100,
         blank=True,
-        help_text=_("Proxmox API token ID, e.g. netbox-import. The token secret is stored in the password field."),
+        help_text=_("Legacy Proxmox API token ID. Kept only for deleting old endpoints."),
     )
     password_ciphertext = models.TextField(
         blank=True,
@@ -59,7 +59,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     )
     validate_ssl = models.BooleanField(
         default=False,
-        help_text=_("Validate the endpoint TLS certificate."),
+        help_text=_("Validate the VMware endpoint certificate."),
     )
     request_timeout_seconds = models.PositiveIntegerField(
         default=120,
@@ -74,7 +74,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     max_retries = models.PositiveSmallIntegerField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(10)],
-        help_text=_("Retries for safe Proxmox GET requests when the endpoint returns transient errors."),
+        help_text=_("Legacy connection retry setting. Kept only for compatibility with older plugin versions."),
     )
     retry_backoff_seconds = models.DecimalField(
         max_digits=5,
@@ -101,7 +101,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         to="virtualization.Cluster",
         on_delete=models.PROTECT,
         related_name="vmware_import_endpoints",
-        help_text=_("NetBox cluster into which hypervisor VMs will be synchronized."),
+        help_text=_("NetBox cluster into which VMware VMs will be synchronized."),
     )
     include_name_regex = models.CharField(
         max_length=255,
@@ -128,7 +128,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
     )
     sync_lxc_containers = models.BooleanField(
         default=True,
-        verbose_name=_("Sync Proxmox LXC containers"),
+        verbose_name=_("Sync legacy Proxmox LXC containers"),
     )
     update_existing = models.BooleanField(
         default=True,
@@ -196,17 +196,10 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
 
     clone_fields = (
         "enabled",
-        "provider",
         "host",
         "port",
         "username",
-        "auth_method",
-        "token_name",
         "validate_ssl",
-        "request_timeout_seconds",
-        "connect_timeout_seconds",
-        "max_retries",
-        "retry_backoff_seconds",
         "tenant",
         "site",
         "cluster",
@@ -216,7 +209,6 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         "sync_interfaces",
         "sync_ip_addresses",
         "sync_primary_ips",
-        "sync_lxc_containers",
         "update_existing",
         "default_ipv4_prefix_length",
         "default_ipv6_prefix_length",
@@ -225,8 +217,8 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
 
     class Meta:
         ordering = ("name",)
-        verbose_name = _("virtualization endpoint")
-        verbose_name_plural = _("virtualization endpoints")
+        verbose_name = _("VMware endpoint")
+        verbose_name_plural = _("VMware endpoints")
 
     def __str__(self):
         return self.name
@@ -257,15 +249,13 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
             if self.cluster.site_id != self.site_id:
                 raise ValidationError({"cluster": _("Selected cluster belongs to a different site.")})
 
-        if self.provider == EndpointProviderChoices.PROVIDER_VMWARE:
-            if self.auth_method != EndpointAuthMethodChoices.METHOD_PASSWORD:
-                raise ValidationError({"auth_method": _("VMware endpoints currently support username/password authentication only.")})
+        if self.provider != EndpointProviderChoices.PROVIDER_VMWARE:
+            raise ValidationError(
+                {"provider": _("Proxmox endpoints are legacy records and can only be deleted.")}
+            )
 
-        if self.provider == EndpointProviderChoices.PROVIDER_PROXMOX:
-            if "@" not in self.username:
-                raise ValidationError({"username": _("Proxmox usernames must include a realm, e.g. root@pam or user@pve.")})
-            if self.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN and not self.token_name:
-                raise ValidationError({"token_name": _("A token name is required for Proxmox API token authentication.")})
+        if self.auth_method != EndpointAuthMethodChoices.METHOD_PASSWORD:
+            raise ValidationError({"auth_method": _("VMware endpoints support username/password authentication only.")})
 
     def mark_queued(self):
         self.last_status = SyncStatusChoices.STATUS_QUEUED
@@ -315,13 +305,13 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         self.save(update_fields=("last_sync_at", "last_status", "last_message", "next_sync_at", "last_updated"))
 
     def set_next_sync(self, now=None):
-        if self.enabled and self.sync_interval_minutes:
+        if self.provider == EndpointProviderChoices.PROVIDER_VMWARE and self.enabled and self.sync_interval_minutes:
             self.next_sync_at = (now or timezone.now()) + timedelta(minutes=self.sync_interval_minutes)
         else:
             self.next_sync_at = None
 
     def save(self, *args, **kwargs):
-        if not self.enabled or not self.sync_interval_minutes:
+        if self.provider != EndpointProviderChoices.PROVIDER_VMWARE or not self.enabled or not self.sync_interval_minutes:
             self.next_sync_at = None
         elif not self.next_sync_at:
             self.set_next_sync()

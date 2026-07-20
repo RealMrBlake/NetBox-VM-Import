@@ -1,6 +1,12 @@
 {% extends 'generic/object.html' %}
 
 {% block content %}
+{% if object.provider != "vmware" %}
+<div class="alert alert-warning" role="alert">
+  This is a legacy Proxmox endpoint from an older plugin version. Proxmox sync is no longer supported; this endpoint can be deleted.
+</div>
+{% endif %}
+
 <div class="row mb-3">
   <div class="col col-md-6">
     <div class="card">
@@ -23,34 +29,12 @@
           <td>{{ object.username }}</td>
         </tr>
         <tr>
-          <th scope="row">Auth method</th>
-          <td>{{ object.get_auth_method_display }}</td>
-        </tr>
-        {% if object.token_name %}
-        <tr>
-          <th scope="row">Token name</th>
-          <td>{{ object.token_name }}</td>
-        </tr>
-        {% endif %}
-        <tr>
           <th scope="row">Enabled</th>
           <td>{{ object.enabled|yesno:"Yes,No" }}</td>
         </tr>
         <tr>
           <th scope="row">Validate SSL</th>
           <td>{{ object.validate_ssl|yesno:"Yes,No" }}</td>
-        </tr>
-        <tr>
-          <th scope="row">API timeout</th>
-          <td>{{ object.request_timeout_seconds }} seconds</td>
-        </tr>
-        <tr>
-          <th scope="row">Connect timeout</th>
-          <td>{{ object.connect_timeout_seconds }} seconds</td>
-        </tr>
-        <tr>
-          <th scope="row">GET retries</th>
-          <td>{{ object.max_retries }} retries, {{ object.retry_backoff_seconds }}s backoff</td>
         </tr>
       </table>
     </div>
@@ -110,6 +94,7 @@
           <td>{{ object.last_message|default:"-" }}</td>
         </tr>
       </table>
+      {% if object.provider == "vmware" %}
       {% if perms.netbox_vmware_importer.change_vcenterendpoint %}
       <div class="card-footer">
         <form method="post" action="{% url 'plugins:netbox_vmware_importer:vcenterendpoint_sync' pk=object.pk %}">
@@ -119,6 +104,7 @@
           </button>
         </form>
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </div>

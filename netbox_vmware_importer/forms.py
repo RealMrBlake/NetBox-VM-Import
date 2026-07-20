@@ -29,16 +29,8 @@ class VCenterEndpointForm(NetBoxModelForm):
     cluster = DynamicModelChoiceField(
         queryset=Cluster.objects.all(),
     )
-    provider = forms.ChoiceField(
-        choices=EndpointProviderChoices,
-        required=True,
-    )
-    auth_method = forms.ChoiceField(
-        choices=EndpointAuthMethodChoices,
-        required=True,
-    )
     password = forms.CharField(
-        label=_("Password / token secret"),
+        label=_("Password"),
         required=False,
         widget=forms.PasswordInput(render_value=False),
         help_text=_("Leave blank to keep the currently stored password."),
@@ -47,18 +39,11 @@ class VCenterEndpointForm(NetBoxModelForm):
     fieldsets = (
         FieldSet("name", "slug", "enabled", "comments", name=_("Endpoint")),
         FieldSet(
-            "provider",
             "host",
             "port",
             "username",
-            "auth_method",
-            "token_name",
             "password",
             "validate_ssl",
-            "request_timeout_seconds",
-            "connect_timeout_seconds",
-            "max_retries",
-            "retry_backoff_seconds",
             name=_("Connection"),
         ),
         FieldSet("tenant", "site", "cluster", name=_("NetBox target")),
@@ -69,7 +54,6 @@ class VCenterEndpointForm(NetBoxModelForm):
             "sync_interfaces",
             "sync_ip_addresses",
             "sync_primary_ips",
-            "sync_lxc_containers",
             "update_existing",
             name=_("Sync behavior"),
         ),
@@ -83,18 +67,11 @@ class VCenterEndpointForm(NetBoxModelForm):
             "name",
             "slug",
             "enabled",
-            "provider",
             "host",
             "port",
             "username",
-            "auth_method",
-            "token_name",
             "password",
             "validate_ssl",
-            "request_timeout_seconds",
-            "connect_timeout_seconds",
-            "max_retries",
-            "retry_backoff_seconds",
             "tenant",
             "site",
             "cluster",
@@ -104,7 +81,6 @@ class VCenterEndpointForm(NetBoxModelForm):
             "sync_interfaces",
             "sync_ip_addresses",
             "sync_primary_ips",
-            "sync_lxc_containers",
             "update_existing",
             "default_ipv4_prefix_length",
             "default_ipv6_prefix_length",
@@ -125,6 +101,10 @@ class VCenterEndpointForm(NetBoxModelForm):
     def save(self, commit=True):
         obj = super().save(commit=False)
         password = self.cleaned_data.get("password")
+
+        obj.provider = EndpointProviderChoices.PROVIDER_VMWARE
+        obj.auth_method = EndpointAuthMethodChoices.METHOD_PASSWORD
+        obj.token_name = ""
 
         if password:
             obj.set_password(password)

@@ -18,9 +18,9 @@ endpoint_item = PluginMenuItem(
 )
 
 menu = PluginMenu(
-    label="VM Import",
+    label="VMware Import",
     groups=(
-        ("Providers", (endpoint_item,)),
+        ("VMware", (endpoint_item,)),
     ),
     icon_class="mdi mdi-cloud-sync",
 )

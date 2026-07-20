@@ -6,7 +6,7 @@ from .jobs import clear_endpoint_sync_schedule, schedule_endpoint_sync
 from .models import VCenterEndpoint
 
 
-AUTOMATIC_SYNC_FIELDS = {"enabled", "sync_interval_minutes"}
+AUTOMATIC_SYNC_FIELDS = {"enabled", "provider", "sync_interval_minutes"}
 
 
 @receiver(post_save, sender=VCenterEndpoint)

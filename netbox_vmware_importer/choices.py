@@ -24,7 +24,7 @@ class EndpointProviderChoices(ChoiceSet):
 
     CHOICES = [
         (PROVIDER_VMWARE, _("VMware vSphere"), "blue"),
-        (PROVIDER_PROXMOX, _("Proxmox VE"), "orange"),
+        (PROVIDER_PROXMOX, _("Proxmox VE (legacy)"), "gray"),
     ]
 
 
@@ -34,5 +34,5 @@ class EndpointAuthMethodChoices(ChoiceSet):
 
     CHOICES = [
         (METHOD_PASSWORD, _("Username/password"), "blue"),
-        (METHOD_API_TOKEN, _("API token"), "green"),
+        (METHOD_API_TOKEN, _("API token (legacy)"), "gray"),
     ]

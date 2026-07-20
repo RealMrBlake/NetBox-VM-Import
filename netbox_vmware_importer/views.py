@@ -8,6 +8,7 @@ from netbox.views import generic
 from .filtersets import VCenterEndpointFilterSet
 from .forms import VCenterEndpointFilterForm, VCenterEndpointForm
 from .jobs import SyncVCenterEndpointJob
+from .choices import EndpointProviderChoices
 from .models import VCenterEndpoint
 from .tables import VCenterEndpointTable
 
@@ -29,7 +30,7 @@ class VCenterEndpointView(generic.ObjectView):
 
 
 class VCenterEndpointEditView(generic.ObjectEditView):
-    queryset = VCenterEndpoint.objects.all()
+    queryset = VCenterEndpoint.objects.filter(provider=EndpointProviderChoices.PROVIDER_VMWARE)
     form = VCenterEndpointForm
 
 
@@ -43,6 +44,10 @@ class VCenterEndpointSyncView(View):
 
         if not request.user.has_perm("netbox_vmware_importer.change_vcenterendpoint"):
             return HttpResponseForbidden()
+
+        if endpoint.provider != EndpointProviderChoices.PROVIDER_VMWARE:
+            messages.error(request, _("Legacy Proxmox endpoints can only be deleted."))
+            return redirect(endpoint)
 
         SyncVCenterEndpointJob.enqueue(instance=endpoint)
         endpoint.mark_queued()
