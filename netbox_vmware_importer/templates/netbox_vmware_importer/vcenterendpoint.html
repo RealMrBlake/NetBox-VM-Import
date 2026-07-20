@@ -44,6 +44,14 @@
           <th scope="row">API timeout</th>
           <td>{{ object.request_timeout_seconds }} seconds</td>
         </tr>
+        <tr>
+          <th scope="row">Connect timeout</th>
+          <td>{{ object.connect_timeout_seconds }} seconds</td>
+        </tr>
+        <tr>
+          <th scope="row">GET retries</th>
+          <td>{{ object.max_retries }} retries, {{ object.retry_backoff_seconds }}s backoff</td>
+        </tr>
       </table>
     </div>
   </div>

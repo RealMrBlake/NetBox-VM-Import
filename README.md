@@ -25,7 +25,7 @@ Im Python-Environment der NetBox-Installation:
 pip install git+https://git.mrblake.cc/MrBlake/NetBox-VM-Import.git
 ```
 
-NetBox selbst ist keine `pip`-Dependency des Plugins. Das Plugin wird im vorhandenen NetBox-Virtualenv installiert und bringt nur externe Bibliotheken wie `pyvmomi` und `cryptography` mit.
+NetBox selbst ist keine `pip`-Dependency des Plugins. Das Plugin wird im vorhandenen NetBox-Virtualenv installiert und bringt nur externe Bibliotheken wie `pyvmomi`, `cryptography`, `requests` und `proxmox-sdk` mit.
 
 In `configuration.py` aktivieren:
 
@@ -54,11 +54,13 @@ sudo systemctl restart netbox netbox-rq
 
 Bei selbstsignierten Proxmox-Zertifikaten `Validate SSL` deaktiviert lassen. Wenn Proxmox langsam antwortet, kann `API timeout` am Endpoint erhoeht werden.
 
-Der Proxmox-Client ignoriert Proxy-Umgebungsvariablen des NetBox-Dienstes, damit interne Proxmox-Adressen nicht versehentlich ueber einen HTTPS-Proxy laufen.
+Der Proxmox-Client nutzt bevorzugt `proxmox-sdk` wie `netbox-proxbox`/`proxbox-api`. Falls dieses Paket nicht installiert ist, faellt er auf den bisherigen `requests`-Client zurueck. Proxy-Umgebungsvariablen des NetBox-Dienstes werden im Fallback ignoriert, damit interne Proxmox-Adressen nicht versehentlich ueber einen HTTPS-Proxy laufen.
 
-Der unauthentifizierte Proxmox-`version`-Probe ist nur diagnostisch. Wenn er haengt, versucht das Plugin den eigentlichen Login trotzdem.
+Im `requests`-Fallback ist der unauthentifizierte Proxmox-`version`-Probe nur diagnostisch. Wenn er haengt, versucht das Plugin den eigentlichen Login trotzdem. Im bevorzugten SDK-Pfad wird `version` als erste SDK-Anfrage genutzt und authentifiziert dabei automatisch.
 
 Proxmox-API-Verbindungen nutzen TLS 1.2-Kompatibilitaetsmodus, weil einige Firewalls oder TLS-Inspektionspfade moderne TLS-1.3-ClientHellos blockieren.
+
+Bei Proxmox koennen `Connect timeout`, `API timeout`, `GET retries` und `Retry backoff` pro Endpoint gesetzt werden. Das entspricht dem Ansatz von Proxbox, Verbindungs- und Retry-Parameter pro Proxmox-Ziel zu speichern.
 
 Wenn Passwort-Login auf `access/ticket` haengt, zuerst den Realm im Benutzernamen pruefen (`root@pam`, `user@pve`, `user@ldaprealm`). Fuer produktive Imports ist ein Proxmox API-Token meistens stabiler als Passwort-Login.
 

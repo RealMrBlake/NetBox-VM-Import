@@ -1,7 +1,9 @@
 import ipaddress
 import re
 import ssl
+import time
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -20,6 +22,19 @@ except ImportError:  # pragma: no cover - handled at runtime inside NetBox
     HTTPAdapter = None
     requests = None
     InsecureRequestWarning = None
+
+try:
+    from proxmox_sdk import ProxmoxSDK
+    from proxmox_sdk.sdk.exceptions import (
+        ProxmoxConnectionError as SDKConnectionError,
+        ProxmoxTimeoutError as SDKTimeoutError,
+        ResourceException as SDKResourceException,
+    )
+except ImportError:  # pragma: no cover - optional compatibility fallback
+    ProxmoxSDK = None
+    SDKConnectionError = None
+    SDKTimeoutError = None
+    SDKResourceException = None
 
 try:
     from pyVim.connect import Disconnect, SmartConnect
@@ -253,19 +268,113 @@ class ProxmoxClient:
     DISK_KEY_PATTERN = re.compile(r"^(ide|sata|scsi|virtio)\d+$")
     LXC_DISK_KEY_PATTERN = re.compile(r"^(rootfs|mp\d+)$")
     NET_KEY_PATTERN = re.compile(r"^net\d+$")
+    FULL_TOKEN_PATTERN = re.compile(r"^(?:PVEAPIToken=)?(?P<user>[^!]+)!(?P<name>[^=]+)=(?P<value>.+)$")
+    RETRY_STATUSES = {502, 503, 504}
 
     def __init__(self, endpoint):
         self.endpoint = endpoint
+        self.host, self.port = self._parse_endpoint_address(endpoint.host, endpoint.port)
+        self.url_host = self._format_host_for_url(self.host)
         self.session = None
-        self.base_url = f"https://{endpoint.host}:{endpoint.port}/api2/json"
-        self.timeout = (10, endpoint.request_timeout_seconds or 120)
+        self.sdk = None
+        self.uses_sdk = False
+        self.base_url = f"https://{self.url_host}:{self.port}/api2/json"
+        self.connect_timeout = endpoint.connect_timeout_seconds or 10
+        self.read_timeout = endpoint.request_timeout_seconds or 120
+        self.timeout = (self.connect_timeout, self.read_timeout)
+        self.max_retries = endpoint.max_retries or 0
+        self.retry_backoff = float(endpoint.retry_backoff_seconds or 0.5)
         self.api_probe_succeeded = False
+        self.api_probe_error = ""
 
     def __enter__(self):
-        if requests is None:
-            raise ProxmoxConnectionError("requests is not installed in the NetBox Python environment.")
         if "@" not in self.endpoint.username:
             raise ProxmoxConnectionError("Proxmox username must include a realm, e.g. root@pam or user@pve.")
+
+        if ProxmoxSDK is not None:
+            self._connect_with_sdk()
+            return self
+
+        self._connect_with_requests()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self.sdk is not None:
+            self.sdk.close()
+        if self.session is not None:
+            self.session.close()
+
+    @staticmethod
+    def _parse_endpoint_address(host, port):
+        raw_host = str(host or "").strip()
+        resolved_port = int(port or 8006)
+        if not raw_host:
+            return raw_host, resolved_port
+
+        parsed = urlsplit(raw_host if "://" in raw_host else f"//{raw_host}")
+        parsed_host = parsed.hostname
+        if parsed.port:
+            resolved_port = parsed.port
+
+        if parsed_host:
+            return parsed_host.strip("[]"), resolved_port
+
+        return raw_host.strip("[]"), resolved_port
+
+    @staticmethod
+    def _format_host_for_url(host):
+        if ":" in host and not host.startswith("["):
+            return f"[{host}]"
+        return host
+
+    def _connect_with_sdk(self):
+        user = (self.endpoint.username or "").strip()
+        kwargs = {
+            "host": self.host,
+            "backend": "https",
+            "service": "PVE",
+            "port": self.port,
+            "user": user,
+            "verify_ssl": self.endpoint.validate_ssl,
+            "timeout": self.read_timeout,
+            "connect_timeout": self.connect_timeout,
+            "max_retries": self.max_retries,
+            "retry_backoff": self.retry_backoff,
+        }
+
+        if self.endpoint.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN:
+            user, token_name, token_value = self._normalized_token_credentials()
+            kwargs["user"] = user
+            kwargs.update(
+                {
+                    "token_name": token_name,
+                    "token_value": token_value,
+                }
+            )
+        else:
+            kwargs["password"] = self.endpoint.password
+
+        try:
+            self.sdk = ProxmoxSDK.sync(**kwargs)
+            self.uses_sdk = True
+            self._get("version")
+            self.api_probe_succeeded = True
+        except ProxmoxConnectionError:
+            if self.sdk is not None:
+                self.sdk.close()
+                self.sdk = None
+            raise
+        except Exception as exc:
+            if self.sdk is not None:
+                self.sdk.close()
+                self.sdk = None
+            raise ProxmoxConnectionError(self._describe_sdk_error("GET", "version", exc)) from exc
+
+    def _connect_with_requests(self):
+        if requests is None:
+            raise ProxmoxConnectionError(
+                "Neither proxmox-sdk nor requests is installed in the NetBox Python environment."
+            )
 
         self.session = requests.Session()
         self.session.trust_env = False
@@ -285,16 +394,10 @@ class ProxmoxClient:
         self._probe_api_availability()
 
         if self.endpoint.auth_method == EndpointAuthMethodChoices.METHOD_API_TOKEN:
-            token_id = self.endpoint.token_name if "!" in self.endpoint.token_name else f"{self.endpoint.username}!{self.endpoint.token_name}"
-            self.session.headers.update({"Authorization": f"PVEAPIToken={token_id}={self.endpoint.password}"})
+            user, token_name, token_value = self._normalized_token_credentials()
+            self.session.headers.update({"Authorization": f"PVEAPIToken={user}!{token_name}={token_value}"})
         else:
             self._authenticate_with_password()
-
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        if self.session is not None:
-            self.session.close()
 
     def _probe_api_availability(self):
         try:
@@ -304,6 +407,45 @@ class ProxmoxClient:
         except ProxmoxConnectionError as exc:
             self.api_probe_succeeded = False
             self.api_probe_error = str(exc)
+
+    def _normalized_token_credentials(self):
+        user = (self.endpoint.username or "").strip()
+        token_name = (self.endpoint.token_name or "").strip()
+        token_value = (self.endpoint.password or "").strip()
+
+        parsed = self._parse_full_token(token_value)
+        if parsed is not None:
+            user, token_name, token_value = parsed
+        else:
+            parsed = self._parse_full_token(token_name)
+            if parsed is not None:
+                parsed_user, parsed_name, parsed_value = parsed
+                user = parsed_user or user
+                token_name = parsed_name
+                if parsed_value and not token_value:
+                    token_value = parsed_value
+            elif token_name.startswith("PVEAPIToken="):
+                token_name = token_name.removeprefix("PVEAPIToken=").strip()
+
+            if "!" in token_name:
+                parsed_user, parsed_name = token_name.rsplit("!", 1)
+                if parsed_user:
+                    user = parsed_user
+                token_name = parsed_name
+
+        if not token_name or not token_value:
+            raise ProxmoxConnectionError(
+                "Proxmox API token authentication requires a token name and token secret."
+            )
+
+        return user, token_name, token_value
+
+    @classmethod
+    def _parse_full_token(cls, value):
+        match = cls.FULL_TOKEN_PATTERN.match(str(value or "").strip())
+        if not match:
+            return None
+        return match.group("user").strip(), match.group("name").strip(), match.group("value").strip()
 
     def _authenticate_with_password(self):
         response = self._request(
@@ -331,29 +473,86 @@ class ProxmoxClient:
     def _request(self, method, path, timeout=None, **kwargs):
         url = self._url(path)
         request_timeout = timeout or self.timeout
+        attempts = self.max_retries + 1 if method.upper() == "GET" else 1
+        last_error = None
+
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(min(self.retry_backoff * (2 ** (attempt - 1)), 30.0))
+            try:
+                response = self.session.request(method, url, timeout=request_timeout, **kwargs)
+                if response.status_code in self.RETRY_STATUSES and attempt < attempts - 1:
+                    last_error = ProxmoxConnectionError(
+                        f"Proxmox API {method} {path} returned transient HTTP {response.status_code}."
+                    )
+                    continue
+                response.raise_for_status()
+                return response
+            except requests.ConnectTimeout as exc:
+                last_error = ProxmoxConnectionError(
+                    f"Proxmox API {method} {path} connect timed out after {request_timeout[0]} seconds."
+                )
+                if attempt >= attempts - 1:
+                    raise last_error from exc
+            except requests.ReadTimeout as exc:
+                detail = f"Proxmox API {method} {path} read timed out after {request_timeout[1]} seconds."
+                if path == "access/ticket" and self.api_probe_succeeded:
+                    detail += " API version endpoint responded, so the delay is likely in Proxmox authentication. Check username realm (e.g. root@pam), PAM/LDAP auth, two-factor auth, or use an API token."
+                elif getattr(self, "api_probe_error", "") and path != "version":
+                    detail += f" Earlier unauthenticated version probe also failed: {self.api_probe_error}"
+                last_error = ProxmoxConnectionError(detail)
+                if attempt >= attempts - 1:
+                    raise last_error from exc
+            except requests.exceptions.SSLError as exc:
+                raise ProxmoxConnectionError(
+                    f"Proxmox API {method} {path} TLS validation failed. Disable Validate SSL for self-signed certificates or install the CA certificate. Details: {exc}"
+                ) from exc
+            except requests.RequestException as exc:
+                last_error = ProxmoxConnectionError(f"Proxmox API {method} {path} failed: {exc}")
+                if attempt >= attempts - 1:
+                    raise last_error from exc
+
+        if last_error is not None:
+            raise last_error
+        raise ProxmoxConnectionError(f"Proxmox API {method} {path} failed without a response.")
+
+    def _sdk_get(self, path, params=None):
         try:
-            response = self.session.request(method, url, timeout=request_timeout, **kwargs)
-            response.raise_for_status()
-            return response
-        except requests.ConnectTimeout as exc:
-            raise ProxmoxConnectionError(
-                f"Proxmox API {method} {path} connect timed out after {request_timeout[0]} seconds."
-            ) from exc
-        except requests.ReadTimeout as exc:
-            detail = f"Proxmox API {method} {path} read timed out after {request_timeout[1]} seconds."
-            if path == "access/ticket" and self.api_probe_succeeded:
-                detail += " API version endpoint responded, so the delay is likely in Proxmox authentication. Check username realm (e.g. root@pam), PAM/LDAP auth, two-factor auth, or use an API token."
-            elif getattr(self, "api_probe_error", "") and path != "version":
-                detail += f" Earlier unauthenticated version probe also failed: {self.api_probe_error}"
-            raise ProxmoxConnectionError(detail) from exc
-        except requests.exceptions.SSLError as exc:
-            raise ProxmoxConnectionError(
-                f"Proxmox API {method} {path} TLS validation failed. Disable Validate SSL for self-signed certificates or install the CA certificate. Details: {exc}"
-            ) from exc
-        except requests.RequestException as exc:
-            raise ProxmoxConnectionError(f"Proxmox API {method} {path} failed: {exc}") from exc
+            return self.sdk(path.strip("/")).get(**(params or {}))
+        except Exception as exc:
+            raise ProxmoxConnectionError(self._describe_sdk_error("GET", path, exc)) from exc
+
+    def _describe_sdk_error(self, method, path, exc):
+        if SDKTimeoutError is not None and isinstance(exc, SDKTimeoutError):
+            return f"Proxmox SDK {method} {path} timed out after {self.read_timeout} seconds."
+
+        if SDKConnectionError is not None and isinstance(exc, SDKConnectionError):
+            detail = str(exc).strip() or "connection failed"
+            return f"Proxmox SDK {method} {path} connection failed: {detail}"
+
+        if SDKResourceException is not None and isinstance(exc, SDKResourceException):
+            status_code = getattr(exc, "status_code", None)
+            status_message = getattr(exc, "status_message", "") or ""
+            content = (getattr(exc, "content", "") or "").strip()
+            errors = getattr(exc, "errors", None)
+            parts = []
+            if status_code:
+                parts.append(f"HTTP {status_code} {status_message}".strip())
+            elif status_message:
+                parts.append(status_message)
+            if content:
+                parts.append(content)
+            if errors:
+                parts.append(str(errors))
+            detail = " - ".join(parts) if parts else str(exc)
+            return f"Proxmox SDK {method} {path} failed: {detail}"
+
+        detail = str(exc).strip() or "unknown error"
+        return f"Proxmox SDK {method} {path} failed: {detail}"
 
     def _get(self, path, params=None):
+        if self.uses_sdk:
+            return self._sdk_get(path, params=params)
         response = self._request("GET", path, params=params)
         return response.json().get("data")
 

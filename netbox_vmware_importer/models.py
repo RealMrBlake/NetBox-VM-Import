@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
@@ -64,6 +65,23 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         default=120,
         validators=[MinValueValidator(5), MaxValueValidator(600)],
         help_text=_("HTTP/API read timeout in seconds."),
+    )
+    connect_timeout_seconds = models.PositiveIntegerField(
+        default=10,
+        validators=[MinValueValidator(1), MaxValueValidator(120)],
+        help_text=_("TCP/TLS connection timeout in seconds."),
+    )
+    max_retries = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text=_("Retries for safe Proxmox GET requests when the endpoint returns transient errors."),
+    )
+    retry_backoff_seconds = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.50"),
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("60.00"))],
+        help_text=_("Exponential retry backoff base delay in seconds."),
     )
     tenant = models.ForeignKey(
         to="tenancy.Tenant",
@@ -186,6 +204,9 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         "token_name",
         "validate_ssl",
         "request_timeout_seconds",
+        "connect_timeout_seconds",
+        "max_retries",
+        "retry_backoff_seconds",
         "tenant",
         "site",
         "cluster",
