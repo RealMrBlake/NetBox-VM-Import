@@ -7,9 +7,9 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("dcim", "__latest__"),
-        ("tenancy", "__latest__"),
-        ("virtualization", "__latest__"),
+        ("dcim", "0001_squashed"),
+        ("tenancy", "0001_squashed_0012"),
+        ("virtualization", "0001_squashed_0022"),
     ]
 
     operations = [

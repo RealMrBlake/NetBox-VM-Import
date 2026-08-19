@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("extras", "__latest__"),
+        ("extras", "0001_squashed"),
         ("netbox_vmware_importer", "0001_initial"),
     ]
 

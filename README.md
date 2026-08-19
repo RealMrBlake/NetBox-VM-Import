@@ -2,6 +2,10 @@
 
 NetBox plugin zum Synchronisieren von VMware vSphere/vCenter VMs nach NetBox.
 
+## Kompatibilitaet
+
+Version `0.3.1` ist fuer NetBox `4.6.5` bis `4.6.8` freigegeben.
+
 ## Funktionen
 
 - vCenter/ESXi-Ziele direkt in der NetBox-Weboberflaeche pflegen
@@ -40,6 +44,10 @@ Danach Migrationen anwenden und NetBox/RQ neu starten:
 python manage.py migrate netbox_vmware_importer
 sudo systemctl restart netbox netbox-rq
 ```
+
+## Upgrade-Hinweis
+
+Version `0.3.1` behebt instabile Django-Migration-Dependencies aus frueheren Releases. Wenn `python manage.py migrate` mit `InconsistentMigrationHistory` fuer `netbox_vmware_importer.0001_initial` fehlschlaegt, zuerst das Plugin auf `0.3.1` aktualisieren und danach `python manage.py migrate --plan` sowie `python manage.py migrate` normal ausfuehren. Manuelle Aenderungen an `django_migrations` oder `--fake` sollten nicht notwendig sein.
 
 ## Nutzung
 
