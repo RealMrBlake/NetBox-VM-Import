@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netbox-vmware-importer"
-version = "0.3.1"
+version = "0.3.2"
 description = "NetBox plugin to synchronize VMware vSphere virtual machines into NetBox."
 readme = "README.md"
 requires-python = ">=3.12"

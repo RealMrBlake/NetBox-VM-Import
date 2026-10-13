@@ -5,11 +5,11 @@ class VMwareImporterConfig(PluginConfig):
     name = "netbox_vmware_importer"
     verbose_name = "NetBox VMware Importer"
     description = "Synchronize VMware vSphere virtual machines into NetBox."
-    version = "0.3.1"
+    version = "0.3.2"
     author = "Codex & Claude"
     base_url = "vmware-importer"
     min_version = "4.6.5"
-    max_version = "4.7.1"
+    max_version = "4.7.99"
 
     def ready(self):
         super().ready()

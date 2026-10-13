@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+- Raised `max_version` to `4.7.99`; verified against NetBox 4.7.2 (the plugin was skipped on 4.7.2 before).
+- Restored migrations `0003`–`0006`, which had been deleted while the model still uses their fields
+  (`provider`, `auth_method`, `token_name`, timeouts, retries, `sync_lxc_containers`). Fresh
+  installations were missing these columns. Existing installations already have them recorded as
+  applied, so nothing changes there.
+
 ## 0.3.1
 
 - Fixed Django migration dependencies for NetBox 4.6.5 through 4.6.8.
