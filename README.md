@@ -6,7 +6,7 @@ Synchronise virtual machines from VMware vSphere / vCenter into NetBox.
 |---|---|
 | **Plugin name** | `netbox_vmware_importer` |
 | **Package** | `netbox-vmware-importer` |
-| **NetBox** | `4.6.5` – `4.7.1` |
+| **NetBox** | `4.6.5` – `4.7.x` |
 | **Python** | `>=3.12` |
 | **Repository** | <https://git.mrblake.cc/MrBlake/NetBox-VM-Import> |
 
@@ -28,7 +28,7 @@ guest data is incomplete.
 
 ## Compatibility
 
-- NetBox `4.6.5` – `4.7.1`
+- NetBox `4.6.5` – `4.7.x` (verified with 4.7.2)
 - Python `>=3.12`
 - Dependencies installed automatically: `pyvmomi`, `cryptography`
 
