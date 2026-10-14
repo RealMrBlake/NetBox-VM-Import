@@ -1,6 +1,8 @@
 import django.db.models.deletion
 from django.db import migrations, models
 
+from ._operations import AddFieldIfMissing
+
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -28,7 +30,7 @@ class Migration(migrations.Migration):
                 to="virtualization.cluster",
             ),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="provider",
             field=models.CharField(
@@ -40,7 +42,7 @@ class Migration(migrations.Migration):
                 max_length=30,
             ),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="auth_method",
             field=models.CharField(
@@ -52,7 +54,7 @@ class Migration(migrations.Migration):
                 max_length=30,
             ),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="token_name",
             field=models.CharField(
@@ -61,7 +63,7 @@ class Migration(migrations.Migration):
                 max_length=100,
             ),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="sync_lxc_containers",
             field=models.BooleanField(default=True, verbose_name="Sync Proxmox LXC containers"),

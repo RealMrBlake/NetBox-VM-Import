@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+- Fixed `DuplicateColumn` (`column "provider" ... already exists`) when running migrations on
+  installations that still have the columns from migrations `0003`-`0005` but no longer have
+  them recorded in `django_migrations`. These migrations now only add columns that are missing.
+
 ## 0.3.2
 
 - Raised `max_version` to `4.7.99`; verified against NetBox 4.7.2 (the plugin was skipped on 4.7.2 before).

@@ -1,6 +1,8 @@
 import django.core.validators
 from django.db import migrations, models
 
+from ._operations import AddFieldIfMissing
+
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -8,7 +10,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="request_timeout_seconds",
             field=models.PositiveIntegerField(

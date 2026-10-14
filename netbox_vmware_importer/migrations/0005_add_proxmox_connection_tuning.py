@@ -3,6 +3,8 @@ import decimal
 import django.core.validators
 from django.db import migrations, models
 
+from ._operations import AddFieldIfMissing
+
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -10,7 +12,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="connect_timeout_seconds",
             field=models.PositiveIntegerField(
@@ -22,7 +24,7 @@ class Migration(migrations.Migration):
                 ],
             ),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="max_retries",
             field=models.PositiveSmallIntegerField(
@@ -34,7 +36,7 @@ class Migration(migrations.Migration):
                 ],
             ),
         ),
-        migrations.AddField(
+        AddFieldIfMissing(
             model_name="vcenterendpoint",
             name="retry_backoff_seconds",
             field=models.DecimalField(
