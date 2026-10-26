@@ -10,6 +10,12 @@ Synchronise virtual machines from VMware vSphere / vCenter into NetBox.
 | **Python** | `>=3.12` |
 | **Repository** | <https://git.mrblake.cc/MrBlake/NetBox-VM-Import> |
 
+## Screenshots
+
+VMware vCenter and Proxmox VE endpoints with sync status:
+
+![VMware vCenter and Proxmox VE endpoints with sync status](docs/screenshots/endpoints.png)
+
 ## Features
 
 - Manage vCenter/ESXi endpoints directly in the NetBox web UI
