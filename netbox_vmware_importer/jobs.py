@@ -1,6 +1,7 @@
 from core.choices import JobStatusChoices
 from core.exceptions import JobFailed
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from netbox.jobs import JobRunner, system_job
 
 from .choices import EndpointProviderChoices, SyncStatusChoices
@@ -46,11 +47,12 @@ class SyncVCenterEndpointJob(JobRunner):
             endpoint = VCenterEndpoint.objects.get(pk=endpoint_pk)
 
         if not endpoint.enabled:
-            endpoint.mark_failure("Endpoint is disabled.")
-            raise JobFailed("Endpoint is disabled.")
+            message = _("Endpoint is disabled.")
+            endpoint.mark_failure(message)
+            raise JobFailed(message)
 
         if endpoint.provider != EndpointProviderChoices.PROVIDER_VMWARE:
-            message = "Legacy Proxmox endpoints are no longer supported. Delete this endpoint."
+            message = _("Legacy Proxmox endpoints are no longer supported. Delete this endpoint.")
             clear_endpoint_sync_schedule(endpoint)
             endpoint.mark_failure(message)
             raise JobFailed(message)
@@ -72,7 +74,7 @@ class SyncVCenterEndpointJob(JobRunner):
             endpoint.last_updated_count = result.updated
             endpoint.last_error_count = result.errors
             endpoint.last_status = SyncStatusChoices.STATUS_FAILED
-            endpoint.last_message = f"Finished with {result.errors} VM error(s). Check the job log."
+            endpoint.last_message = _("Finished with %(errors)s VM error(s). Check the job log.") % {"errors": result.errors}
             endpoint.set_next_sync(endpoint.last_sync_at)
             endpoint.save(
                 update_fields=(
@@ -120,7 +122,7 @@ class ScheduleDueVCenterSyncsJob(JobRunner):
         legacy_endpoints = VCenterEndpoint.objects.exclude(provider=EndpointProviderChoices.PROVIDER_VMWARE)
         cleared = 0
         for endpoint in legacy_endpoints:
-            deleted_count, _ = clear_endpoint_sync_schedule(endpoint)
+            deleted_count, __ = clear_endpoint_sync_schedule(endpoint)
             cleared += deleted_count
 
         enabled_endpoints = VCenterEndpoint.objects.filter(

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Sum
+from django.utils.translation import gettext as _
 from dcim.models import MACAddress, Platform
 from ipam.models import IPAddress
 from virtualization.models import VMInterface, VirtualDisk, VirtualMachine
@@ -79,7 +80,7 @@ class VMwareClient:
 
     def __enter__(self):
         if SmartConnect is None:
-            raise VMwareConnectionError("pyVmomi is not installed in the NetBox Python environment.")
+            raise VMwareConnectionError(_("pyVmomi is not installed in the NetBox Python environment."))
 
         ssl_context = None
         if not self.endpoint.validate_ssl:
@@ -224,7 +225,7 @@ class VMwareImporter:
 
     def sync(self):
         if self.endpoint.provider != EndpointProviderChoices.PROVIDER_VMWARE:
-            raise VMwareConnectionError("Legacy Proxmox endpoints are no longer supported. Delete this endpoint.")
+            raise VMwareConnectionError(_("Legacy Proxmox endpoints are no longer supported. Delete this endpoint."))
 
         result = SyncResult()
         platforms = list(Platform.objects.all())

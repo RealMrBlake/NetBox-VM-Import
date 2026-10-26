@@ -34,7 +34,7 @@ guest data is incomplete.
 
 ## Compatibility
 
-- NetBox `4.6.5` – `4.7.x` (verified with 4.7.2)
+- NetBox `4.6.5` – `4.7.x` (verified with 4.7.2 and 4.7.3)
 - Python `>=3.12`
 - Dependencies installed automatically: `pyvmomi`, `cryptography`
 
@@ -144,6 +144,13 @@ which endpoints are due and enqueues the actual sync jobs.
 Proxmox support has been removed. Old Proxmox endpoints from earlier versions
 remain visible in the list and detail view so they can be deleted; they can no
 longer be edited, created or synchronised.
+
+### Language
+
+The plugin is available in English and German. Switch the display language
+as usual in the user profile (**Preferences → Language**). Translations live in
+`netbox_vmware_importer/locale/de/LC_MESSAGES/`. Status messages stored on an
+endpoint keep the language that was active when the sync ran.
 
 ## Security
 

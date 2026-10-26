@@ -3,6 +3,7 @@ import hashlib
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
+from django.utils.translation import gettext as _
 
 
 def _fernet():
@@ -22,4 +23,4 @@ def decrypt_secret(value):
     try:
         return _fernet().decrypt(value.encode("ascii")).decode("utf-8")
     except InvalidToken as exc:
-        raise ValueError("Stored endpoint password cannot be decrypted. Re-enter it on the endpoint.") from exc
+        raise ValueError(_("Stored endpoint password cannot be decrypted. Re-enter it on the endpoint.")) from exc

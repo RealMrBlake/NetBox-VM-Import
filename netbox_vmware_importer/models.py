@@ -17,38 +17,47 @@ from .crypto import decrypt_secret, encrypt_secret
 
 class VCenterEndpoint(JobsMixin, NetBoxModel):
     name = models.CharField(
+        verbose_name=_("Name"),
         max_length=100,
         unique=True,
     )
     slug = models.SlugField(
+        verbose_name=_("Slug"),
         max_length=100,
         unique=True,
     )
     enabled = models.BooleanField(
+        verbose_name=_("Enabled"),
         default=True,
     )
     provider = models.CharField(
+        verbose_name=_("Provider"),
         max_length=30,
         choices=EndpointProviderChoices,
         default=EndpointProviderChoices.PROVIDER_VMWARE,
     )
     host = models.CharField(
+        verbose_name=_("Host"),
         max_length=255,
         help_text=_("vCenter or ESXi hostname or IP address"),
     )
     port = models.PositiveIntegerField(
+        verbose_name=_("Port"),
         default=443,
         validators=[MinValueValidator(1), MaxValueValidator(65535)],
     )
     username = models.CharField(
+        verbose_name=_("Username"),
         max_length=255,
     )
     auth_method = models.CharField(
+        verbose_name=_("Authentication method"),
         max_length=30,
         choices=EndpointAuthMethodChoices,
         default=EndpointAuthMethodChoices.METHOD_PASSWORD,
     )
     token_name = models.CharField(
+        verbose_name=_("Token name"),
         max_length=100,
         blank=True,
         help_text=_("Legacy Proxmox API token ID. Kept only for deleting old endpoints."),
@@ -58,25 +67,30 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         editable=False,
     )
     validate_ssl = models.BooleanField(
+        verbose_name=_("Validate SSL"),
         default=False,
         help_text=_("Validate the VMware endpoint certificate."),
     )
     request_timeout_seconds = models.PositiveIntegerField(
+        verbose_name=_("Request timeout (seconds)"),
         default=120,
         validators=[MinValueValidator(5), MaxValueValidator(600)],
         help_text=_("HTTP/API read timeout in seconds."),
     )
     connect_timeout_seconds = models.PositiveIntegerField(
+        verbose_name=_("Connect timeout (seconds)"),
         default=10,
         validators=[MinValueValidator(1), MaxValueValidator(120)],
         help_text=_("TCP/TLS connection timeout in seconds."),
     )
     max_retries = models.PositiveSmallIntegerField(
+        verbose_name=_("Maximum retries"),
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(10)],
         help_text=_("Legacy connection retry setting. Kept only for compatibility with older plugin versions."),
     )
     retry_backoff_seconds = models.DecimalField(
+        verbose_name=_("Retry backoff (seconds)"),
         max_digits=5,
         decimal_places=2,
         default=Decimal("0.50"),
@@ -84,6 +98,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         help_text=_("Exponential retry backoff base delay in seconds."),
     )
     tenant = models.ForeignKey(
+        verbose_name=_("Tenant"),
         to="tenancy.Tenant",
         on_delete=models.PROTECT,
         related_name="vmware_import_endpoints",
@@ -91,6 +106,7 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         null=True,
     )
     site = models.ForeignKey(
+        verbose_name=_("Site"),
         to="dcim.Site",
         on_delete=models.PROTECT,
         related_name="vmware_import_endpoints",
@@ -98,17 +114,20 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         null=True,
     )
     cluster = models.ForeignKey(
+        verbose_name=_("Cluster"),
         to="virtualization.Cluster",
         on_delete=models.PROTECT,
         related_name="vmware_import_endpoints",
         help_text=_("NetBox cluster into which VMware VMs will be synchronized."),
     )
     include_name_regex = models.CharField(
+        verbose_name=_("Include name regex"),
         max_length=255,
         blank=True,
         help_text=_("Only synchronize matching VM names. Leave empty to include all VMs."),
     )
     exclude_name_regex = models.CharField(
+        verbose_name=_("Exclude name regex"),
         max_length=255,
         blank=True,
         help_text=_("Skip matching VM names."),
@@ -118,12 +137,15 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         verbose_name=_("Sync powered-off VMs"),
     )
     sync_interfaces = models.BooleanField(
+        verbose_name=_("Sync interfaces"),
         default=True,
     )
     sync_ip_addresses = models.BooleanField(
+        verbose_name=_("Sync IP addresses"),
         default=True,
     )
     sync_primary_ips = models.BooleanField(
+        verbose_name=_("Sync primary IPs"),
         default=True,
     )
     sync_lxc_containers = models.BooleanField(
@@ -131,66 +153,80 @@ class VCenterEndpoint(JobsMixin, NetBoxModel):
         verbose_name=_("Sync legacy Proxmox LXC containers"),
     )
     update_existing = models.BooleanField(
+        verbose_name=_("Update existing VMs"),
         default=True,
         help_text=_("Update existing VMs matched by name and cluster."),
     )
     default_ipv4_prefix_length = models.PositiveSmallIntegerField(
+        verbose_name=_("Default IPv4 prefix length"),
         default=24,
         validators=[MinValueValidator(1), MaxValueValidator(32)],
     )
     default_ipv6_prefix_length = models.PositiveSmallIntegerField(
+        verbose_name=_("Default IPv6 prefix length"),
         default=64,
         validators=[MinValueValidator(1), MaxValueValidator(128)],
     )
     sync_interval_minutes = models.PositiveIntegerField(
+        verbose_name=_("Sync interval (minutes)"),
         blank=True,
         null=True,
         validators=[MinValueValidator(5)],
         help_text=_("Optional automatic sync interval in minutes. Leave empty for manual sync only."),
     )
     next_sync_at = models.DateTimeField(
+        verbose_name=_("Next sync"),
         blank=True,
         null=True,
         editable=False,
     )
     last_sync_at = models.DateTimeField(
+        verbose_name=_("Last sync"),
         blank=True,
         null=True,
         editable=False,
     )
     last_success_at = models.DateTimeField(
+        verbose_name=_("Last success"),
         blank=True,
         null=True,
         editable=False,
     )
     last_status = models.CharField(
+        verbose_name=_("Last status"),
         max_length=30,
         choices=SyncStatusChoices,
         default=SyncStatusChoices.STATUS_NEVER,
         editable=False,
     )
     last_message = models.CharField(
+        verbose_name=_("Last message"),
         max_length=500,
         blank=True,
         editable=False,
     )
     last_vm_count = models.PositiveIntegerField(
+        verbose_name=_("Last VM count"),
         default=0,
         editable=False,
     )
     last_created_count = models.PositiveIntegerField(
+        verbose_name=_("Last created count"),
         default=0,
         editable=False,
     )
     last_updated_count = models.PositiveIntegerField(
+        verbose_name=_("Last updated count"),
         default=0,
         editable=False,
     )
     last_error_count = models.PositiveIntegerField(
+        verbose_name=_("Last error count"),
         default=0,
         editable=False,
     )
     comments = models.TextField(
+        verbose_name=_("Comments"),
         blank=True,
     )
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The UI, choices, validation and sync messages are translatable; German translation added.
+- Added a test that keeps the NetBox version range in `README.md` and `COMPATIBILITY.md` in line with `min_version`/`max_version`.
+
 ## 0.3.3
 
 - Fixed `DuplicateColumn` (`column "provider" ... already exists`) when running migrations on

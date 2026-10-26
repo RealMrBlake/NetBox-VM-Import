@@ -28,4 +28,8 @@ dependencies = [
 include = ["netbox_vmware_importer*"]
 
 [tool.setuptools.package-data]
-netbox_vmware_importer = ["templates/**/*.html"]
+netbox_vmware_importer = [
+    "templates/**/*.html",
+    "locale/*/LC_MESSAGES/*.po",
+    "locale/*/LC_MESSAGES/*.mo",
+]

@@ -1,66 +1,67 @@
 {% extends 'generic/object.html' %}
+{% load i18n %}
 
 {% block content %}
 {% if object.provider != "vmware" %}
 <div class="alert alert-warning" role="alert">
-  This is a legacy Proxmox endpoint from an older plugin version. Proxmox sync is no longer supported; this endpoint can be deleted.
+  {% trans "This is a legacy Proxmox endpoint from an older plugin version. Proxmox sync is no longer supported; this endpoint can be deleted." %}
 </div>
 {% endif %}
 
 <div class="row mb-3">
   <div class="col col-md-6">
     <div class="card">
-      <h5 class="card-header">Endpoint</h5>
+      <h5 class="card-header">{% trans "Endpoint" %}</h5>
       <table class="table table-hover attr-table">
         <tr>
-          <th scope="row">Name</th>
+          <th scope="row">{% trans "Name" %}</th>
           <td>{{ object.name }}</td>
         </tr>
         <tr>
-          <th scope="row">Provider</th>
+          <th scope="row">{% trans "Provider" %}</th>
           <td>{{ object.get_provider_display }}</td>
         </tr>
         <tr>
-          <th scope="row">Host</th>
+          <th scope="row">{% trans "Host" %}</th>
           <td>{{ object.host }}:{{ object.port }}</td>
         </tr>
         <tr>
-          <th scope="row">Username</th>
+          <th scope="row">{% trans "Username" %}</th>
           <td>{{ object.username }}</td>
         </tr>
         <tr>
-          <th scope="row">Enabled</th>
-          <td>{{ object.enabled|yesno:"Yes,No" }}</td>
+          <th scope="row">{% trans "Enabled" %}</th>
+          <td>{% if object.enabled %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</td>
         </tr>
         <tr>
-          <th scope="row">Validate SSL</th>
-          <td>{{ object.validate_ssl|yesno:"Yes,No" }}</td>
+          <th scope="row">{% trans "Validate SSL" %}</th>
+          <td>{% if object.validate_ssl %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</td>
         </tr>
       </table>
     </div>
   </div>
   <div class="col col-md-6">
     <div class="card">
-      <h5 class="card-header">NetBox Target</h5>
+      <h5 class="card-header">{% trans "NetBox Target" %}</h5>
       <table class="table table-hover attr-table">
         <tr>
-          <th scope="row">Tenant</th>
+          <th scope="row">{% trans "Tenant" %}</th>
           <td>{{ object.tenant|default:"-" }}</td>
         </tr>
         <tr>
-          <th scope="row">Site</th>
+          <th scope="row">{% trans "Site" %}</th>
           <td>{{ object.site|default:"-" }}</td>
         </tr>
         <tr>
-          <th scope="row">Cluster</th>
+          <th scope="row">{% trans "Cluster" %}</th>
           <td>{{ object.cluster }}</td>
         </tr>
         <tr>
-          <th scope="row">Sync interval</th>
-          <td>{{ object.sync_interval_minutes|default:"Manual only" }}</td>
+          <th scope="row">{% trans "Sync interval" %}</th>
+          <td>{% if object.sync_interval_minutes %}{{ object.sync_interval_minutes }}{% else %}{% trans "Manual only" %}{% endif %}</td>
         </tr>
         <tr>
-          <th scope="row">Next sync</th>
+          <th scope="row">{% trans "Next sync" %}</th>
           <td>{{ object.next_sync_at|default:"-" }}</td>
         </tr>
       </table>
@@ -71,26 +72,26 @@
 <div class="row mb-3">
   <div class="col col-md-6">
     <div class="card">
-      <h5 class="card-header">Sync</h5>
+      <h5 class="card-header">{% trans "Sync" %}</h5>
       <table class="table table-hover attr-table">
         <tr>
-          <th scope="row">Last status</th>
+          <th scope="row">{% trans "Last status" %}</th>
           <td>{{ object.get_last_status_display }}</td>
         </tr>
         <tr>
-          <th scope="row">Last sync</th>
+          <th scope="row">{% trans "Last sync" %}</th>
           <td>{{ object.last_sync_at|default:"-" }}</td>
         </tr>
         <tr>
-          <th scope="row">Last success</th>
+          <th scope="row">{% trans "Last success" %}</th>
           <td>{{ object.last_success_at|default:"-" }}</td>
         </tr>
         <tr>
-          <th scope="row">VMs</th>
-          <td>{{ object.last_vm_count }} total, {{ object.last_created_count }} created, {{ object.last_updated_count }} updated, {{ object.last_error_count }} errors</td>
+          <th scope="row">{% trans "VMs" %}</th>
+          <td>{% blocktrans with total=object.last_vm_count created=object.last_created_count updated=object.last_updated_count errors=object.last_error_count %}{{ total }} total, {{ created }} created, {{ updated }} updated, {{ errors }} errors{% endblocktrans %}</td>
         </tr>
         <tr>
-          <th scope="row">Message</th>
+          <th scope="row">{% trans "Message" %}</th>
           <td>{{ object.last_message|default:"-" }}</td>
         </tr>
       </table>
@@ -100,7 +101,7 @@
         <form method="post" action="{% url 'plugins:netbox_vmware_importer:vcenterendpoint_sync' pk=object.pk %}">
           {% csrf_token %}
           <button type="submit" class="btn btn-primary">
-            <i class="mdi mdi-sync"></i> Sync jetzt starten
+            <i class="mdi mdi-sync"></i> {% trans "Start sync now" %}
           </button>
         </form>
       </div>
@@ -110,23 +111,23 @@
   </div>
   <div class="col col-md-6">
     <div class="card">
-      <h5 class="card-header">Filters</h5>
+      <h5 class="card-header">{% trans "Filters" %}</h5>
       <table class="table table-hover attr-table">
         <tr>
-          <th scope="row">Include regex</th>
+          <th scope="row">{% trans "Include regex" %}</th>
           <td>{{ object.include_name_regex|default:"-" }}</td>
         </tr>
         <tr>
-          <th scope="row">Exclude regex</th>
+          <th scope="row">{% trans "Exclude regex" %}</th>
           <td>{{ object.exclude_name_regex|default:"-" }}</td>
         </tr>
         <tr>
-          <th scope="row">Powered off VMs</th>
-          <td>{{ object.sync_powered_off|yesno:"Synced,Skipped" }}</td>
+          <th scope="row">{% trans "Powered off VMs" %}</th>
+          <td>{% if object.sync_powered_off %}{% trans "Synced" %}{% else %}{% trans "Skipped" %}{% endif %}</td>
         </tr>
         <tr>
-          <th scope="row">Interfaces/IPs</th>
-          <td>{{ object.sync_interfaces|yesno:"Interfaces on,Interfaces off" }} / {{ object.sync_ip_addresses|yesno:"IPs on,IPs off" }}</td>
+          <th scope="row">{% trans "Interfaces/IPs" %}</th>
+          <td>{% if object.sync_interfaces %}{% trans "Interfaces on" %}{% else %}{% trans "Interfaces off" %}{% endif %} / {% if object.sync_ip_addresses %}{% trans "IPs on" %}{% else %}{% trans "IPs off" %}{% endif %}</td>
         </tr>
       </table>
     </div>
@@ -137,7 +138,7 @@
 <div class="row mb-3">
   <div class="col">
     <div class="card">
-      <h5 class="card-header">Comments</h5>
+      <h5 class="card-header">{% trans "Comments" %}</h5>
       <div class="card-body rendered-markdown">
         {{ object.comments|linebreaksbr }}
       </div>
